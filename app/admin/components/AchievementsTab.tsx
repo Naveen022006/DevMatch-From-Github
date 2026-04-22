@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
-import type { AdminAchievement, AchievementSlugCount, Challenge, ChallengeDifficulty } from "@/types/admin";
+import type { AdminAchievement, AchievementSlugCount, Challenge, ChallengeDifficulty, ChallengeSubmission } from "@/types/admin";
 import type { AwardAllResult } from "@/app/api/admin/achievements/award-all/route";
 import { ACHIEVEMENTS } from "@/lib/achievements/definitions";
 
@@ -40,6 +40,15 @@ export default function AchievementsTab({
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmDeleteChallenge, setConfirmDeleteChallenge] = useState<string | null>(null);
+
+  // ── Submission review state ───────────────────────────────────────────────
+  const [expandedChallenge, setExpandedChallenge] = useState<string | null>(null);
+  const [submissions, setSubmissions] = useState<Record<string, ChallengeSubmission[]>>({});
+  const [subsLoading, setSubsLoading] = useState<string | null>(null);
+  const [overrideLoading, setOverrideLoading] = useState<string | null>(null);
+  const [reEvalLoading, setReEvalLoading] = useState<string | null>(null);
+  const [adminFeedbacks, setAdminFeedbacks] = useState<Record<string, string>>({});
+  const [subError, setSubError] = useState<string | null>(null);
 
   useEffect(() => {
     loadChallenges();
@@ -148,6 +157,82 @@ export default function AchievementsTab({
     } else {
       setConfirmDeleteChallenge(challengeId);
       setTimeout(() => setConfirmDeleteChallenge((c) => (c === challengeId ? null : c)), 3000);
+    }
+  }
+
+  async function loadSubmissions(challengeId: string) {
+    if (expandedChallenge === challengeId) {
+      setExpandedChallenge(null);
+      return;
+    }
+    setExpandedChallenge(challengeId);
+    if (submissions[challengeId]) return; // already loaded
+    setSubsLoading(challengeId);
+    setSubError(null);
+    try {
+      const res = await fetch(`/api/admin/challenge-submissions?challengeId=${challengeId}`);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      setSubmissions((prev) => ({ ...prev, [challengeId]: json.submissions }));
+    } catch (e) {
+      setSubError(e instanceof Error ? e.message : "Failed to load submissions");
+    } finally {
+      setSubsLoading(null);
+    }
+  }
+
+  async function handleOverride(submissionId: string, challengeId: string, adminOverride: boolean) {
+    setOverrideLoading(submissionId);
+    setSubError(null);
+    try {
+      const res = await fetch("/api/admin/challenge-submissions", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          submissionId,
+          adminOverride,
+          adminFeedback: adminFeedbacks[submissionId] ?? null,
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      setSubmissions((prev) => ({
+        ...prev,
+        [challengeId]: (prev[challengeId] ?? []).map((s) =>
+          s.id === submissionId
+            ? { ...s, admin_override: adminOverride, admin_feedback: adminFeedbacks[submissionId] ?? null }
+            : s
+        ),
+      }));
+    } catch (e) {
+      setSubError(e instanceof Error ? e.message : "Override failed");
+    } finally {
+      setOverrideLoading(null);
+    }
+  }
+
+  async function handleReEvaluate(submissionId: string, challengeId: string) {
+    setReEvalLoading(submissionId);
+    setSubError(null);
+    try {
+      const res = await fetch("/api/admin/challenge-submissions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ submissionId }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      setSubmissions((prev) => ({
+        ...prev,
+        [challengeId]: (prev[challengeId] ?? []).map((s) =>
+          s.id === submissionId
+            ? { ...s, is_correct: json.correct, ai_feedback: json.feedback, admin_override: null, admin_feedback: null }
+            : s
+        ),
+      }));
+    } catch (e) {
+      setSubError(e instanceof Error ? e.message : "Re-evaluation failed");
+    } finally {
+      setReEvalLoading(null);
     }
   }
 
@@ -688,6 +773,13 @@ export default function AchievementsTab({
                       </p>
                     </div>
                     <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+                      {/* View submissions */}
+                      <button
+                        onClick={() => loadSubmissions(c.id)}
+                        style={{ padding: "5px 12px", borderRadius: 6, border: `1px solid ${expandedChallenge === c.id ? "rgba(167,139,250,0.5)" : "rgba(167,139,250,0.2)"}`, background: expandedChallenge === c.id ? "rgba(167,139,250,0.15)" : "transparent", color: expandedChallenge === c.id ? "#a78bfa" : "#64748b", cursor: "pointer", fontSize: 12, fontWeight: 600 }}
+                      >
+                        {subsLoading === c.id ? "Loading…" : `Submissions ${submissions[c.id] ? `(${submissions[c.id].length})` : ""}`}
+                      </button>
                       {/* Active toggle */}
                       <button
                         onClick={() => handleToggleChallenge(c.id, !c.is_active)}
@@ -704,6 +796,91 @@ export default function AchievementsTab({
                       </button>
                     </div>
                   </div>
+
+                  {/* ── Submissions panel ─────────────────────────────── */}
+                  {expandedChallenge === c.id && (
+                    <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                      {subError && (
+                        <div style={{ marginBottom: 10, padding: "8px 12px", borderRadius: 6, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", color: "#f87171", fontSize: 12, display: "flex", justifyContent: "space-between" }}>
+                          <span>{subError}</span>
+                          <button onClick={() => setSubError(null)} style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer" }}>×</button>
+                        </div>
+                      )}
+                      {subsLoading === c.id && (
+                        <div style={{ padding: "16px 0", textAlign: "center", color: "#64748b", fontSize: 13 }}>Loading submissions…</div>
+                      )}
+                      {submissions[c.id] && submissions[c.id].length === 0 && (
+                        <div style={{ padding: "14px 0", textAlign: "center", color: "#64748b", fontSize: 13 }}>No submissions yet.</div>
+                      )}
+                      {(submissions[c.id] ?? []).map((s) => {
+                        const effective = s.admin_override !== null && s.admin_override !== undefined ? s.admin_override : s.is_correct;
+                        return (
+                          <div key={s.id} style={{ marginBottom: 14, padding: "14px 16px", borderRadius: 10, background: "rgba(6,6,16,0.7)", border: `1px solid ${effective ? "rgba(52,211,153,0.2)" : "rgba(239,68,68,0.15)"}` }}>
+                            {/* User row */}
+                            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+                              {s.user.avatar_url ? (
+                                <Image src={s.user.avatar_url} alt={s.user.github_username} width={26} height={26} style={{ borderRadius: "50%" }} />
+                              ) : (
+                                <div style={{ width: 26, height: 26, borderRadius: "50%", background: "#1e293b", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: "#94a3b8" }}>{s.user.github_username[0]?.toUpperCase()}</div>
+                              )}
+                              <span style={{ fontWeight: 600, color: "#e2e8f0", fontSize: 13 }}>@{s.user.github_username}</span>
+                              <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: effective ? "rgba(52,211,153,0.15)" : "rgba(239,68,68,0.12)", color: effective ? "#34d399" : "#f87171", fontWeight: 700 }}>
+                                {s.admin_override !== null && s.admin_override !== undefined ? "Admin: " : "AI: "}{effective ? "Pass" : "Fail"}
+                              </span>
+                              <span style={{ fontSize: 11, color: "#475569", marginLeft: "auto" }}>{new Date(s.submitted_at).toLocaleDateString()}</span>
+                            </div>
+
+                            {/* Repo link */}
+                            {(s.repo_url ?? s.solution_text) && (
+                              <a href={s.repo_url ?? s.solution_text ?? "#"} target="_blank" rel="noopener noreferrer"
+                                style={{ display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 8, fontSize: 12, color: "#22d3ee", textDecoration: "none", fontFamily: "monospace", wordBreak: "break-all" }}>
+                                🔗 {s.repo_url ?? s.solution_text}
+                              </a>
+                            )}
+
+                            {/* AI feedback */}
+                            <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.5, marginBottom: 10 }}>
+                              <span style={{ fontWeight: 600, color: "#475569" }}>AI: </span>{s.ai_feedback ?? "—"}
+                            </div>
+
+                            {/* Admin feedback input */}
+                            <textarea
+                              placeholder="Admin feedback (optional — override the AI message shown to user)"
+                              value={adminFeedbacks[s.id] ?? (s.admin_feedback ?? "")}
+                              onChange={(e) => setAdminFeedbacks((prev) => ({ ...prev, [s.id]: e.target.value }))}
+                              rows={2}
+                              style={{ width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 7, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", color: "#94a3b8", fontSize: 12, lineHeight: 1.5, resize: "vertical", outline: "none", fontFamily: "inherit", marginBottom: 10 }}
+                            />
+
+                            {/* Action buttons */}
+                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                              <button
+                                onClick={() => handleOverride(s.id, c.id, true)}
+                                disabled={overrideLoading === s.id}
+                                style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid rgba(52,211,153,0.4)", background: effective === true && s.admin_override === true ? "rgba(52,211,153,0.2)" : "transparent", color: "#34d399", cursor: "pointer", fontSize: 12, fontWeight: 600 }}
+                              >
+                                {overrideLoading === s.id ? "…" : "✓ Mark Pass"}
+                              </button>
+                              <button
+                                onClick={() => handleOverride(s.id, c.id, false)}
+                                disabled={overrideLoading === s.id}
+                                style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid rgba(239,68,68,0.35)", background: effective === false && s.admin_override === false ? "rgba(239,68,68,0.15)" : "transparent", color: "#f87171", cursor: "pointer", fontSize: 12, fontWeight: 600 }}
+                              >
+                                {overrideLoading === s.id ? "…" : "✗ Mark Fail"}
+                              </button>
+                              <button
+                                onClick={() => handleReEvaluate(s.id, c.id)}
+                                disabled={reEvalLoading === s.id}
+                                style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid rgba(167,139,250,0.3)", background: "transparent", color: reEvalLoading === s.id ? "#64748b" : "#a78bfa", cursor: reEvalLoading === s.id ? "not-allowed" : "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 5 }}
+                              >
+                                {reEvalLoading === s.id ? <><span style={{ width: 10, height: 10, border: "2px solid rgba(167,139,250,0.3)", borderTopColor: "#a78bfa", borderRadius: "50%", display: "inline-block", animation: "spin 0.8s linear infinite" }} />Re-evaluating…</> : "✦ Re-evaluate with AI"}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             })}

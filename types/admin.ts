@@ -91,9 +91,29 @@ export interface Challenge {
 
 export interface ChallengeWithSubmission extends Challenge {
   submission?: {
+    id: string;
     is_correct: boolean | null;
     ai_feedback: string | null;
+    admin_feedback: string | null;
+    admin_override: boolean | null;
     submitted_at: string;
-    solution_text: string;
+    repo_url: string | null;
+    solution_text: string | null;
   };
+}
+
+// ─── Challenge Submissions (admin) ───────────────────────────────────────────
+
+export interface ChallengeSubmission {
+  id: string;
+  challenge_id: string;
+  user_id: string;
+  repo_url: string | null;
+  solution_text: string | null;
+  is_correct: boolean | null;
+  ai_feedback: string | null;
+  admin_feedback: string | null;
+  admin_override: boolean | null;
+  submitted_at: string;
+  user: AdminUserMini;
 }

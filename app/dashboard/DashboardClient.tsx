@@ -15,13 +15,14 @@ interface Props {
   initialProfile: UserProfile | null;
 }
 
-type Tab = "profile" | "matches" | "story" | "achievements";
+type Tab = "profile" | "matches" | "story" | "achievements" | "challenges";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "profile", label: "Profile" },
   { id: "matches", label: "Matches" },
   { id: "story", label: "Story Card" },
   { id: "achievements", label: "Achievements" },
+  { id: "challenges", label: "Challenges" },
 ];
 
 const S: Record<string, React.CSSProperties> = {
@@ -93,10 +94,13 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
     const json = await res.json();
     if (!res.ok) throw new Error(json.error);
     setAchievements(json.achievements); setTab("achievements");
-    // Also load challenges when viewing achievements tab
-    const cRes = await fetch("/api/challenges");
-    const cJson = await cRes.json();
-    if (cRes.ok) setChallenges(cJson.challenges ?? []);
+  });
+
+  const loadChallenges = () => withLoad("challenges", async () => {
+    const res = await fetch("/api/challenges");
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error);
+    setChallenges(json.challenges ?? []); setTab("challenges");
   });
 
   const handleConnect = async (matchedUserId: string) => {
@@ -113,28 +117,31 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
   };
 
   const handleSubmitChallenge = async (challengeId: string) => {
-    const solution = (challengeSolutions[challengeId] ?? "").trim();
-    if (!solution) return;
+    const repoUrl = (challengeSolutions[challengeId] ?? "").trim();
+    if (!repoUrl) return;
     setChallengeLoading(challengeId);
     try {
       const res = await fetch(`/api/challenges/${challengeId}/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ solution }),
+        body: JSON.stringify({ repoUrl }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error);
-      // Update challenge with result
       setChallenges((prev) =>
         prev.map((c) =>
           c.id === challengeId
             ? {
                 ...c,
                 submission: {
+                  id: json.submissionId,
                   is_correct: json.correct,
                   ai_feedback: json.feedback,
+                  admin_feedback: null,
+                  admin_override: null,
                   submitted_at: new Date().toISOString(),
-                  solution_text: solution,
+                  repo_url: repoUrl,
+                  solution_text: repoUrl,
                 },
               }
             : c
@@ -183,7 +190,10 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
           borderRadius: "14px", marginBottom: "28px",
         }}>
           {TABS.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)} style={{
+            <button key={t.id} onClick={() => {
+              setTab(t.id);
+              if (t.id === "challenges" && challenges.length === 0 && !loading) loadChallenges();
+            }} style={{
               flex: 1, padding: "9px 8px", borderRadius: "10px", fontSize: "13px",
               fontWeight: 600, cursor: "pointer", transition: "all 0.15s", border: "none",
               ...(tab === t.id
@@ -222,6 +232,7 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
                   <PrimaryBtn onClick={loadMatches} loading={loading} label="Find My Matches" />
                   <SecondaryBtn onClick={loadStoryCard} loading={loading} label="Story Card" />
                   <SecondaryBtn onClick={loadAchievements} loading={loading} label="Achievements" />
+                  <SecondaryBtn onClick={loadChallenges} loading={loading} label="Challenges ⚡" />
                   <SecondaryBtn onClick={runAnalysis} loading={loading} label="Re-analyze" small />
                 </div>
               </>
@@ -262,74 +273,139 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
         {tab === "achievements" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
             {isLoading("achievements") ? <><AchievementSkeleton /><AchievementSkeleton /><AchievementSkeleton /></> : achievements.length === 0 ? (
-              <EmptyState icon="✦" title="No achievements yet" desc="Connect with developers to earn your first badge.">
+              <EmptyState icon="✦" title="No achievements yet" desc="Connect with developers and solve challenges to earn badges.">
                 <SecondaryBtn onClick={loadAchievements} loading={loading} label="Refresh" />
               </EmptyState>
             ) : (
               achievements.map((a, i) => <AchievementCard key={a.id} achievement={a} index={i} />)
             )}
+          </div>
+        )}
 
-            {/* Challenges section */}
-            {!isLoading("achievements") && challenges.length > 0 && (
-              <div style={{ marginTop: 8, paddingTop: 20, borderTop: "1px solid rgba(255,255,255,0.07)" }}>
-                <div style={{ fontSize: 11, color: "#334155", letterSpacing: "2px", textTransform: "uppercase", marginBottom: "12px", fontWeight: 600 }}>
-                  Challenges
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {challenges.map((c) => {
-                    const diffColor: Record<string, string> = { easy: "#34d399", medium: "#fbbf24", hard: "#f87171" };
-                    const dc = diffColor[c.difficulty] ?? "#a78bfa";
-                    const sub = c.submission;
-                    const alreadySolved = sub?.is_correct === true;
+        {/* ── Challenges Tab ── */}
+        {tab === "challenges" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+            {isLoading("challenges") ? (
+              <><ChallengeSkeleton /><ChallengeSkeleton /></>
+            ) : challenges.length === 0 ? (
+              <EmptyState icon="⚡" title="No challenges yet" desc="The admin hasn't posted any challenges yet. Check back soon!">
+                <SecondaryBtn onClick={loadChallenges} loading={loading} label="Refresh" />
+              </EmptyState>
+            ) : (
+              <>
+                <p style={{ fontSize: "12px", color: "#475569", marginBottom: "4px" }}>
+                  Solve challenges to earn the <span style={{ color: "#fbbf24" }}>Challenge Complete 🏆</span> achievement
+                </p>
+                {challenges.map((c) => {
+                  const diffColor: Record<string, string> = { easy: "#34d399", medium: "#fbbf24", hard: "#f87171" };
+                  const dc = diffColor[c.difficulty] ?? "#a78bfa";
+                  const sub = c.submission;
+                  const alreadySolved = sub?.is_correct === true;
 
-                    return (
-                      <div
-                        key={c.id}
-                        style={{ background: "rgba(13,13,26,0.95)", border: `1px solid ${alreadySolved ? "rgba(52,211,153,0.25)" : "rgba(255,255,255,0.08)"}`, borderRadius: 14, padding: "16px 18px" }}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                          <span style={{ fontSize: 15, fontWeight: 700, color: "#e2e8f0", flex: 1 }}>{c.title}</span>
-                          <span style={{ padding: "2px 8px", borderRadius: 4, background: `${dc}18`, border: `1px solid ${dc}35`, color: dc, fontSize: 11, fontWeight: 700, textTransform: "capitalize" }}>{c.difficulty}</span>
-                          {alreadySolved && <span style={{ fontSize: 16 }}>✅</span>}
+                  return (
+                    <div
+                      key={c.id}
+                      style={{
+                        background: "rgba(13,13,26,0.95)",
+                        border: `1px solid ${alreadySolved ? "rgba(52,211,153,0.3)" : "rgba(255,255,255,0.09)"}`,
+                        borderRadius: "18px",
+                        padding: "20px 22px",
+                        boxShadow: alreadySolved ? "0 0 24px rgba(52,211,153,0.06)" : "none",
+                      }}
+                    >
+                      {/* Header */}
+                      <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 12 }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
+                            <span style={{ fontSize: 16, fontWeight: 700, color: "#f1f5f9" }}>{c.title}</span>
+                            {alreadySolved && <span style={{ fontSize: 14 }}>✅</span>}
+                          </div>
+                          <span style={{ padding: "2px 9px", borderRadius: 4, background: `${dc}18`, border: `1px solid ${dc}35`, color: dc, fontSize: 11, fontWeight: 700, textTransform: "capitalize" }}>
+                            {c.difficulty}
+                          </span>
                         </div>
-                        <p style={{ margin: "0 0 12px", fontSize: 13, color: "#64748b", lineHeight: 1.6 }}>{c.description}</p>
-
-                        {/* Previous feedback */}
-                        {sub && (
-                          <div style={{ marginBottom: 12, padding: "10px 12px", borderRadius: 8, background: sub.is_correct ? "rgba(52,211,153,0.08)" : "rgba(239,68,68,0.07)", border: `1px solid ${sub.is_correct ? "rgba(52,211,153,0.2)" : "rgba(239,68,68,0.2)"}` }}>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: sub.is_correct ? "#34d399" : "#f87171", marginBottom: 4 }}>
-                              {sub.is_correct ? "✓ Correct!" : "✗ Incorrect"}
-                            </div>
-                            <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.5 }}>{sub.ai_feedback}</div>
-                          </div>
-                        )}
-
-                        {/* Submission form — show if not solved */}
-                        {!alreadySolved && (
-                          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                            <textarea
-                              placeholder="Write your solution or explanation here…"
-                              value={challengeSolutions[c.id] ?? (sub?.solution_text ?? "")}
-                              onChange={(e) => setChallengeSolutions((prev) => ({ ...prev, [c.id]: e.target.value }))}
-                              rows={4}
-                              style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "#e2e8f0", fontSize: 13, lineHeight: 1.6, resize: "vertical", outline: "none", fontFamily: "inherit" }}
-                            />
-                            <button
-                              onClick={() => handleSubmitChallenge(c.id)}
-                              disabled={challengeLoading === c.id || !(challengeSolutions[c.id] ?? sub?.solution_text ?? "").trim()}
-                              style={{ alignSelf: "flex-start", padding: "9px 20px", borderRadius: 10, border: "none", background: challengeLoading === c.id ? "rgba(124,58,237,0.3)" : "linear-gradient(135deg, #7c3aed, #4f46e5)", color: challengeLoading === c.id ? "#94a3b8" : "#fff", cursor: challengeLoading === c.id ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}
-                            >
-                              {challengeLoading === c.id ? (
-                                <><span className="spinner" style={{ width: 12, height: 12 }} />Evaluating…</>
-                              ) : sub ? "Resubmit" : "Submit Solution"}
-                            </button>
-                          </div>
-                        )}
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
+
+                      {/* Problem statement */}
+                      <div style={{ marginBottom: 16, padding: "14px 16px", borderRadius: 10, background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.15)" }}>
+                        <div style={{ fontSize: 10, color: "#7c3aed", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>
+                          Problem Statement
+                        </div>
+                        <p style={{ margin: 0, fontSize: 14, color: "#94a3b8", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{c.description}</p>
+                      </div>
+
+                      {/* Previous feedback */}
+                      {sub && (
+                        <div style={{ marginBottom: 14, padding: "12px 14px", borderRadius: 10, background: sub.is_correct ? "rgba(52,211,153,0.07)" : "rgba(239,68,68,0.07)", border: `1px solid ${sub.is_correct ? "rgba(52,211,153,0.2)" : "rgba(239,68,68,0.2)"}` }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: sub.is_correct ? "#34d399" : "#f87171" }}>
+                              {sub.is_correct ? "✓ Correct — Well done!" : "✗ Not quite right"}
+                            </span>
+                            {sub.admin_override !== null && sub.admin_override !== undefined && (
+                              <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 3, background: "rgba(167,139,250,0.15)", color: "#a78bfa", fontWeight: 600 }}>
+                                Admin reviewed
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.6 }}>
+                            {sub.admin_feedback ?? sub.ai_feedback}
+                          </div>
+                          {sub.repo_url && (
+                            <a href={sub.repo_url} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 8, fontSize: 11, color: "#64748b", textDecoration: "none" }}>
+                              🔗 {sub.repo_url}
+                            </a>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Submission form */}
+                      {!alreadySolved && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                          {/* Instructions */}
+                          <div style={{ padding: "10px 14px", borderRadius: 8, background: "rgba(34,211,238,0.05)", border: "1px solid rgba(34,211,238,0.12)", fontSize: 12, color: "#64748b", lineHeight: 1.6 }}>
+                            <span style={{ color: "#22d3ee", fontWeight: 600 }}>How to submit:</span> Build your solution in a <strong style={{ color: "#94a3b8" }}>public GitHub repository</strong>, then paste the repo URL below. The AI will clone and evaluate your code.
+                          </div>
+                          <label style={{ fontSize: 11, color: "#475569", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                            GitHub Repository URL
+                          </label>
+                          <input
+                            type="url"
+                            placeholder="https://github.com/your-username/your-repo"
+                            value={challengeSolutions[c.id] ?? (sub?.repo_url ?? "")}
+                            onChange={(e) => setChallengeSolutions((prev) => ({ ...prev, [c.id]: e.target.value }))}
+                            style={{ padding: "12px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "#e2e8f0", fontSize: 14, outline: "none", fontFamily: "monospace" }}
+                          />
+                          <button
+                            onClick={() => handleSubmitChallenge(c.id)}
+                            disabled={challengeLoading === c.id || !(challengeSolutions[c.id] ?? "").trim()}
+                            style={{
+                              alignSelf: "flex-start", padding: "10px 22px", borderRadius: 12, border: "none",
+                              background: challengeLoading === c.id || !(challengeSolutions[c.id] ?? "").trim()
+                                ? "rgba(124,58,237,0.2)" : "linear-gradient(135deg, #7c3aed, #4f46e5)",
+                              color: challengeLoading === c.id || !(challengeSolutions[c.id] ?? "").trim() ? "#475569" : "#fff",
+                              cursor: challengeLoading === c.id ? "not-allowed" : "pointer",
+                              fontSize: 14, fontWeight: 700,
+                              display: "flex", alignItems: "center", gap: 8,
+                              boxShadow: !(challengeSolutions[c.id] ?? "").trim() ? "none" : "0 0 20px rgba(124,58,237,0.3)",
+                            }}
+                          >
+                            {challengeLoading === c.id ? (
+                              <><span className="spinner" style={{ width: 14, height: 14 }} />AI is evaluating…</>
+                            ) : sub ? "Try Again" : "Submit Solution"}
+                          </button>
+                        </div>
+                      )}
+
+                      {alreadySolved && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderRadius: 10, background: "rgba(52,211,153,0.08)" }}>
+                          <span style={{ fontSize: 16 }}>🏆</span>
+                          <span style={{ fontSize: 13, color: "#34d399", fontWeight: 600 }}>Challenge solved! Achievement unlocked.</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </>
             )}
           </div>
         )}
@@ -537,6 +613,25 @@ function AchievementSkeleton() {
         <div className="skeleton" style={{ height: "12px", width: "75%", borderRadius: "6px" }} />
         <div className="skeleton" style={{ height: "10px", width: "80px", borderRadius: "6px" }} />
       </div>
+    </div>
+  );
+}
+
+function ChallengeSkeleton() {
+  return (
+    <div style={{ background: "rgba(13,13,26,0.95)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "18px", padding: "20px 22px", display: "flex", flexDirection: "column", gap: "14px" }}>
+      <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+        <div className="skeleton" style={{ height: "18px", flex: 1, borderRadius: "6px" }} />
+        <div className="skeleton" style={{ height: "18px", width: "50px", borderRadius: "4px" }} />
+      </div>
+      <div style={{ padding: "14px 16px", borderRadius: "10px", background: "rgba(124,58,237,0.04)", border: "1px solid rgba(124,58,237,0.1)", display: "flex", flexDirection: "column", gap: "8px" }}>
+        <div className="skeleton" style={{ height: "10px", width: "120px", borderRadius: "4px" }} />
+        <div className="skeleton" style={{ height: "13px", borderRadius: "6px" }} />
+        <div className="skeleton" style={{ height: "13px", borderRadius: "6px" }} />
+        <div className="skeleton" style={{ height: "13px", width: "75%", borderRadius: "6px" }} />
+      </div>
+      <div className="skeleton" style={{ height: "80px", borderRadius: "10px" }} />
+      <div className="skeleton" style={{ height: "38px", width: "150px", borderRadius: "12px" }} />
     </div>
   );
 }
