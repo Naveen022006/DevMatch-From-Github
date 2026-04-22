@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
-import type { AdminAchievement, AchievementSlugCount, Challenge, ChallengeDifficulty, ChallengeSubmission } from "@/types/admin";
+import type { AdminAchievement, AchievementSlugCount, Challenge, ChallengeDifficulty, ChallengeSubmission, AdminUser } from "@/types/admin";
+import type { AchievementSlug } from "@/types";
 import type { AwardAllResult } from "@/app/api/admin/achievements/award-all/route";
 import { ACHIEVEMENTS } from "@/lib/achievements/definitions";
 
@@ -49,6 +50,17 @@ export default function AchievementsTab({
   const [reEvalLoading, setReEvalLoading] = useState<string | null>(null);
   const [adminFeedbacks, setAdminFeedbacks] = useState<Record<string, string>>({});
   const [subError, setSubError] = useState<string | null>(null);
+
+  // ── Manual award/delete state ─────────────────────────────────────────────
+  const [showAwardForm, setShowAwardForm] = useState(false);
+  const [awardUsers, setAwardUsers] = useState<AdminUser[] | null>(null);
+  const [awardUsersLoading, setAwardUsersLoading] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const [selectedSlug, setSelectedSlug] = useState<AchievementSlug>("first_connection");
+  const [customMessage, setCustomMessage] = useState("");
+  const [awarding1, setAwarding1] = useState(false);
+  const [awardFormError, setAwardFormError] = useState<string | null>(null);
+  const [awardFormSuccess, setAwardFormSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     loadChallenges();
@@ -236,6 +248,53 @@ export default function AchievementsTab({
     }
   }
 
+  async function openAwardForm() {
+    setShowAwardForm(true);
+    setAwardFormError(null);
+    setAwardFormSuccess(null);
+    if (awardUsers) return;
+    setAwardUsersLoading(true);
+    try {
+      const res = await fetch("/api/admin/users");
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      setAwardUsers(json.users);
+      if (json.users?.length > 0) setSelectedUserId(json.users[0].id);
+    } catch (e) {
+      setAwardFormError(e instanceof Error ? e.message : "Failed to load users");
+    } finally {
+      setAwardUsersLoading(false);
+    }
+  }
+
+  async function handleAwardOne() {
+    if (!selectedUserId) return;
+    setAwarding1(true);
+    setAwardFormError(null);
+    setAwardFormSuccess(null);
+    try {
+      const res = await fetch("/api/admin/achievements/award", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: selectedUserId,
+          achievementSlug: selectedSlug,
+          customMessage: customMessage.trim() || undefined,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      const user = awardUsers?.find((u) => u.id === selectedUserId);
+      setAwardFormSuccess(`✓ Awarded "${ACHIEVEMENTS[selectedSlug].name}" to @${user?.github_username ?? selectedUserId}`);
+      setCustomMessage("");
+      // Refresh the achievements list
+      onAwardComplete();
+    } catch (e) {
+      setAwardFormError(e instanceof Error ? e.message : "Award failed");
+    } finally {
+      setAwarding1(false);
+    }
+  }
   function handleDelete(id: string) {
     if (confirmId === id) {
       onDelete(id);
@@ -463,9 +522,111 @@ export default function AchievementsTab({
         </div>
       )}
 
+      {/* ── Manual award form ───────────────────────────────────────── */}
+      <div style={{ marginBottom: 24 }}>
+        <button
+          onClick={() => showAwardForm ? setShowAwardForm(false) : openAwardForm()}
+          style={{
+            padding: "9px 18px", borderRadius: 8,
+            border: `1px solid ${showAwardForm ? "rgba(52,211,153,0.5)" : "rgba(52,211,153,0.25)"}`,
+            background: showAwardForm ? "rgba(52,211,153,0.15)" : "rgba(52,211,153,0.07)",
+            color: "#34d399", cursor: "pointer", fontSize: 13, fontWeight: 600,
+          }}
+        >
+          {showAwardForm ? "✕ Cancel" : "+ Award Achievement to User"}
+        </button>
+
+        {showAwardForm && (
+          <div style={{ marginTop: 14, padding: "20px 22px", borderRadius: 12, background: "rgba(52,211,153,0.04)", border: "1px solid rgba(52,211,153,0.15)" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+
+              {/* Feedback banners */}
+              {awardFormError && (
+                <div style={{ padding: "10px 14px", borderRadius: 8, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", color: "#f87171", fontSize: 13, display: "flex", justifyContent: "space-between" }}>
+                  <span>{awardFormError}</span>
+                  <button onClick={() => setAwardFormError(null)} style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer" }}>×</button>
+                </div>
+              )}
+              {awardFormSuccess && (
+                <div style={{ padding: "10px 14px", borderRadius: 8, background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.25)", color: "#34d399", fontSize: 13 }}>
+                  {awardFormSuccess}
+                </div>
+              )}
+
+              {/* User picker */}
+              <div>
+                <label style={{ display: "block", fontSize: 11, color: "#64748b", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
+                  Select User
+                </label>
+                {awardUsersLoading ? (
+                  <div style={{ padding: "10px 12px", borderRadius: 7, background: "rgba(255,255,255,0.04)", color: "#64748b", fontSize: 13 }}>Loading users…</div>
+                ) : (
+                  <select
+                    value={selectedUserId}
+                    onChange={(e) => setSelectedUserId(e.target.value)}
+                    style={{ width: "100%", padding: "10px 12px", borderRadius: 7, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(20,20,40,0.95)", color: "#e2e8f0", fontSize: 13, outline: "none" }}
+                  >
+                    {(awardUsers ?? []).map((u) => (
+                      <option key={u.id} value={u.id}>@{u.github_username}{u.display_name ? ` — ${u.display_name}` : ""}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* Achievement picker */}
+              <div>
+                <label style={{ display: "block", fontSize: 11, color: "#64748b", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
+                  Achievement
+                </label>
+                <select
+                  value={selectedSlug}
+                  onChange={(e) => setSelectedSlug(e.target.value as AchievementSlug)}
+                  style={{ width: "100%", padding: "10px 12px", borderRadius: 7, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(20,20,40,0.95)", color: "#e2e8f0", fontSize: 13, outline: "none" }}
+                >
+                  {Object.values(ACHIEVEMENTS).map((a) => (
+                    <option key={a.slug} value={a.slug}>{a.icon} {a.name} — {a.description}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Custom message */}
+              <div>
+                <label style={{ display: "block", fontSize: 11, color: "#64748b", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
+                  Unlock Message <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>(optional — AI generates one if blank)</span>
+                </label>
+                <textarea
+                  placeholder="e.g. Your dedication to open source is inspiring! You've earned this."
+                  value={customMessage}
+                  onChange={(e) => setCustomMessage(e.target.value)}
+                  rows={2}
+                  style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 7, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "#e2e8f0", fontSize: 13, lineHeight: 1.6, resize: "vertical", outline: "none", fontFamily: "inherit" }}
+                />
+              </div>
+
+              {/* Submit */}
+              <button
+                onClick={handleAwardOne}
+                disabled={awarding1 || !selectedUserId}
+                style={{
+                  alignSelf: "flex-start", padding: "10px 24px", borderRadius: 8, border: "none",
+                  background: awarding1 ? "rgba(52,211,153,0.2)" : "linear-gradient(135deg, #059669, #047857)",
+                  color: awarding1 ? "#64748b" : "#fff",
+                  cursor: awarding1 ? "not-allowed" : "pointer",
+                  fontSize: 14, fontWeight: 700,
+                  display: "flex", alignItems: "center", gap: 8,
+                }}
+              >
+                {awarding1 ? (
+                  <><span style={{ width: 14, height: 14, border: "2px solid rgba(52,211,153,0.3)", borderTopColor: "#34d399", borderRadius: "50%", display: "inline-block", animation: "spin 0.8s linear infinite" }} />Awarding…</>
+                ) : "Award Achievement"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Slug summary strip */}
-      {!loading && slugSummary && slugSummary.length > 0 && (
-        <div className="overflow-x-auto" style={{ marginBottom: 24 }}>
+      {!loading && slugSummary && slugSummary.length > 0 && (        <div className="overflow-x-auto" style={{ marginBottom: 24 }}>
           <div style={{ display: "flex", gap: 10, paddingBottom: 4 }} className="whitespace-nowrap">
             {slugSummary.map((item) => {
               const def = ACHIEVEMENTS[item.slug as keyof typeof ACHIEVEMENTS];

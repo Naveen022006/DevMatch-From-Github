@@ -258,7 +258,7 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
 
         {/* ── Story Card Tab ── */}
         {tab === "story" && (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", paddingTop: "8px" }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", paddingTop: "4px", width: "100%" }}>
             {isLoading("story") ? <StorySkeleton /> : !storyCard ? (
               <EmptyState icon="⟡" title="No story card yet" desc={profile ? "Generate your AI-created developer tarot card." : "Analyze your profile first."}>
                 {profile ? <PrimaryBtn onClick={loadStoryCard} loading={loading} label="Generate Story Card" /> : <SecondaryBtn onClick={() => setTab("profile")} loading={false} label="Go to Profile" />}
