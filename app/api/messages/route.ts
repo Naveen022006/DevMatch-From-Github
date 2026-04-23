@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { createNotification } from "@/lib/notifications/helpers";
 import type { Message } from "@/types";
 
 // GET /api/messages?with=userId  — fetch conversation (both directions)
@@ -41,5 +42,32 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Notify receiver — fire-and-forget, avoid spam: only if no existing unread msg notification from this sender
+  const service = createServiceClient();
+  const { data: existing } = await service
+    .from("notifications")
+    .select("id")
+    .eq("user_id", receiverId)
+    .eq("type", "message")
+    .eq("read", false)
+    .eq("link", `chat:${user.id}`)
+    .limit(1)
+    .maybeSingle();
+
+  if (!existing) {
+    const senderUsername =
+      user.user_metadata?.user_name ??
+      user.user_metadata?.login ??
+      user.user_metadata?.preferred_username ??
+      "Someone";
+    createNotification({
+      userId: receiverId,
+      type: "message",
+      message: `@${senderUsername} sent you a message`,
+      link: `chat:${user.id}`,
+    });
+  }
+
   return NextResponse.json({ message: data as Message });
 }

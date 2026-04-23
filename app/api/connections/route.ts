@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { createNotification } from "@/lib/notifications/helpers";
 import type { CompatibilityScore } from "@/types";
 
 // POST /api/connections  — send a connection request
@@ -32,6 +33,21 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Notify the target — get sender username
+  const senderUsername =
+    user.user_metadata?.user_name ??
+    user.user_metadata?.login ??
+    user.user_metadata?.preferred_username ??
+    "Someone";
+
+  createNotification({
+    userId: toUserId,
+    type: "connection_request",
+    message: `@${senderUsername} sent you a connection request`,
+    link: "tab:requests",
+  });
+
   return NextResponse.json({ request: data });
 }
 

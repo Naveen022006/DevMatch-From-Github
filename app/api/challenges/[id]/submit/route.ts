@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { nimChat } from "@/lib/nvidia/client";
 import { checkAndUnlockAchievements } from "@/lib/achievements/system";
 import { addFeedEntry } from "@/lib/feed/helpers";
+import { createNotification } from "@/lib/notifications/helpers";
 import type { UserProfile } from "@/types";
 
 // ── GitHub repo fetcher ───────────────────────────────────────────────────────
@@ -231,6 +232,16 @@ feedback: 3-4 sentences — what the repo does well, what matches/doesn't match 
       metadata: { title: challenge.title, difficulty: challenge.difficulty },
     });
   }
+
+  // Always notify the user of the result
+  createNotification({
+    userId: user.id,
+    type: "challenge_result",
+    message: isCorrect
+      ? `✓ Your submission for "${challenge.title}" is correct — well done!`
+      : `✗ Your submission for "${challenge.title}" was incorrect. Try again!`,
+    link: "tab:challenges",
+  });
 
   return NextResponse.json({
     correct: isCorrect,

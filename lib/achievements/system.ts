@@ -7,6 +7,7 @@ import type {
 import { createServiceClient } from "@/lib/supabase/server";
 import { ACHIEVEMENTS } from "@/lib/achievements/definitions";
 import { addFeedEntry } from "@/lib/feed/helpers";
+import { createNotification } from "@/lib/notifications/helpers";
 
 export { ACHIEVEMENTS };
 
@@ -77,6 +78,14 @@ async function unlockAchievement(
     actorId: userId,
     actionType: "achievement",
     metadata: { slug, name: achievement.name, icon: achievement.icon },
+  });
+
+  // Notify the user
+  createNotification({
+    userId,
+    type: "achievement",
+    message: `${achievement.icon} Achievement unlocked: "${achievement.name}"`,
+    link: "tab:achievements",
   });
 
   return data as UserAchievement;

@@ -8,6 +8,7 @@ import { MatchCard } from "@/components/MatchCard";
 import { StoryCardComponent } from "@/components/StoryCard";
 import { AchievementCard, AchievementToast } from "@/components/AchievementCard";
 import { ChatPanel } from "@/components/ChatPanel";
+import { NotificationsPanel } from "@/components/NotificationsPanel";
 import { createClient } from "@/lib/supabase/client";
 
 interface Props {
@@ -99,6 +100,23 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
     const supabase = createClient();
     await supabase.auth.signOut();
     window.location.href = "/";
+  };
+
+  const handleNotificationNavigate = (link: string) => {
+    if (link.startsWith("tab:")) {
+      const tabName = link.slice(4) as Tab;
+      setTab(tabName);
+      if (tabName === "requests") loadRequests();
+      if (tabName === "matches" && matches.length === 0) loadMatches();
+      if (tabName === "achievements" && achievements.length === 0) loadAchievements();
+      if (tabName === "challenges" && challenges.length === 0) loadChallenges();
+    } else if (link.startsWith("chat:")) {
+      const senderId = link.slice(5);
+      setTab("matches");
+      // Try to find the user in matches to open chat
+      const match = matches.find((m) => m.profile.id === senderId);
+      if (match) setChatUser({ id: senderId, username: match.profile.github_username, avatarUrl: match.profile.avatar_url });
+    }
   };
 
   // Fetch unread count on mount + subscribe to new incoming messages
@@ -399,6 +417,7 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
           <span style={{ fontWeight: 700, fontSize: "16px", color: "#fff" }}>DevMatch</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <NotificationsPanel userId={userId} onNavigate={handleNotificationNavigate} />
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={avatarUrl} alt={githubUsername} style={{ width: "28px", height: "28px", borderRadius: "50%", border: "2px solid rgba(124,58,237,0.5)" }} />
           <span style={{ fontSize: "13px", color: "#64748b", fontFamily: "monospace" }}>@{githubUsername}</span>

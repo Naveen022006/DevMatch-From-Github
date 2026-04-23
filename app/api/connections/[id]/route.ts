@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checkAndUnlockAchievements } from "@/lib/achievements/system";
 import { addFeedEntry } from "@/lib/feed/helpers";
+import { createNotification } from "@/lib/notifications/helpers";
 import type { UserProfile, CompatibilityScore } from "@/types";
 
 // PATCH /api/connections/[id]  — accept or decline a connection request
@@ -101,6 +102,15 @@ export async function PATCH(
   // Emit "connected" feed entry for both parties
   addFeedEntry({ actorId: connReq.from_user_id, actionType: "connected", targetId: connReq.to_user_id });
   addFeedEntry({ actorId: connReq.to_user_id, actionType: "connected", targetId: connReq.from_user_id });
+
+  // Notify the requester that their request was accepted
+  const acceptorUsername = toProfile?.github_username ?? "Someone";
+  createNotification({
+    userId: connReq.from_user_id,
+    type: "connection_accepted",
+    message: `@${acceptorUsername} accepted your connection request`,
+    link: "tab:matches",
+  });
 
   return NextResponse.json({ success: true, status: "accepted", unlockedSlugs: unlocked });
 }
