@@ -204,6 +204,16 @@ export interface AppUser {
   avatar_url: string;
 }
 
+// ─── Skill Badges ─────────────────────────────────────────────────────────────
+
+export interface SkillBadge {
+  id: string;
+  name: string;
+  icon: string;
+  description: string; // shown on hover — "how it was earned"
+  color: string;
+}
+
 // ─── Project Ideas ────────────────────────────────────────────────────────────
 
 export type ProjectDifficulty = "beginner" | "intermediate" | "advanced";

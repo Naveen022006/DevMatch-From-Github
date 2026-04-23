@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import type { UserProfile, StoryCard } from "@/types";
 import { ProfileActions } from "./ProfileActions";
+import { SkillBadges } from "@/components/SkillBadges";
+import { computeSkillBadges } from "@/lib/badges/compute";
 
 interface Props {
   params: Promise<{ username: string }>;
@@ -92,6 +94,7 @@ export default async function PublicProfilePage({ params }: Props) {
     builder: "#f59e0b", learner: "#34d399", maintainer: "#60a5fa", explorer: "#f472b6",
   };
   const primaryColor = storyCard?.primaryColor ?? identityColors[typedProfile.coding_identity] ?? "#a78bfa";
+  const skillBadges = computeSkillBadges(typedProfile);
 
   // Private + not a match: show minimal card
   if (!canViewFull) {
@@ -191,7 +194,7 @@ export default async function PublicProfilePage({ params }: Props) {
 
           {/* Passion areas */}
           {typedProfile.passion_areas?.length > 0 && (
-            <div>
+            <div style={{ marginBottom: skillBadges.length > 0 ? "16px" : 0 }}>
               <div style={{ fontSize: "11px", color: "#475569", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px" }}>Passion Areas</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
                 {typedProfile.passion_areas.map(area => (
@@ -202,6 +205,9 @@ export default async function PublicProfilePage({ params }: Props) {
               </div>
             </div>
           )}
+
+          {/* Skill Badges */}
+          {skillBadges.length > 0 && <SkillBadges badges={skillBadges} />}
         </div>
 
         {/* Story Card */}

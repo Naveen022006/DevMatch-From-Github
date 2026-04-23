@@ -9,6 +9,8 @@ import { StoryCardComponent } from "@/components/StoryCard";
 import { AchievementCard, AchievementToast } from "@/components/AchievementCard";
 import { ChatPanel } from "@/components/ChatPanel";
 import { NotificationsPanel } from "@/components/NotificationsPanel";
+import { SkillBadges } from "@/components/SkillBadges";
+import { computeSkillBadges } from "@/lib/badges/compute";
 import { createClient } from "@/lib/supabase/client";
 
 interface Props {
@@ -951,6 +953,7 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
 function ProfileCard({ profile, avatarUrl }: { profile: UserProfile; avatarUrl: string }) {
   const identityColor: Record<string, string> = { builder: "#f59e0b", learner: "#34d399", maintainer: "#60a5fa", explorer: "#f472b6" };
   const c = identityColor[profile.coding_identity] ?? "#a78bfa";
+  const badges = computeSkillBadges(profile);
   return (
     <div style={{ background: "rgba(13,13,26,0.95)", border: "1px solid rgba(255,255,255,0.09)", borderRadius: "18px", padding: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)" }}>
       <div style={{ display: "flex", gap: "14px", alignItems: "flex-start", marginBottom: "16px" }}>
@@ -973,10 +976,11 @@ function ProfileCard({ profile, avatarUrl }: { profile: UserProfile; avatarUrl: 
         <div style={{ fontSize: "10px", color: "#334155", letterSpacing: "2px", textTransform: "uppercase", marginBottom: "8px", fontWeight: 600 }}>Languages</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>{profile.languages.slice(0, 6).map(l => <Chip key={l} label={l} />)}</div>
       </div>
-      <div>
+      <div style={{ marginBottom: badges.length > 0 ? "14px" : 0 }}>
         <div style={{ fontSize: "10px", color: "#334155", letterSpacing: "2px", textTransform: "uppercase", marginBottom: "8px", fontWeight: 600 }}>Passions</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>{profile.passion_areas.slice(0, 4).map(p => <Chip key={p} label={p} accent />)}</div>
       </div>
+      {badges.length > 0 && <SkillBadges badges={badges} />}
       {profile.peak_hours && <p style={{ fontSize: "12px", color: "#334155", marginTop: "12px" }}>⏰ Most active: <span style={{ color: "#475569" }}>{profile.peak_hours}</span></p>}
     </div>
   );
