@@ -109,6 +109,7 @@ export interface UserProfile {
   is_public?: boolean;
   hide_from_feed?: boolean;
   notification_preferences?: Record<string, boolean>;
+  onboarding_completed?: boolean;
 }
 
 // ─── Matching ─────────────────────────────────────────────────────────────────

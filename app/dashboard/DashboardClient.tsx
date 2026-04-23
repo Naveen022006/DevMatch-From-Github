@@ -11,6 +11,7 @@ import { ChatPanel } from "@/components/ChatPanel";
 import { NotificationsPanel } from "@/components/NotificationsPanel";
 import { SkillBadges } from "@/components/SkillBadges";
 import { computeSkillBadges } from "@/lib/badges/compute";
+import { OnboardingModal } from "@/components/OnboardingModal";
 import { createClient } from "@/lib/supabase/client";
 
 interface Props {
@@ -51,6 +52,7 @@ const S: Record<string, React.CSSProperties> = {
 export default function DashboardClient({ userId, githubUsername, avatarUrl, initialProfile }: Props) {
   const [tab, setTab] = useState<Tab>("profile");
   const [profile, setProfile] = useState<UserProfile | null>(initialProfile);
+  const [showOnboarding, setShowOnboarding] = useState(!initialProfile?.onboarding_completed);
   const [matches, setMatches] = useState<DeveloperMatch[]>([]);
   const [storyCard, setStoryCard] = useState<StoryCard | null>(null);
   const [storyRegenerating, setStoryRegenerating] = useState(false);
@@ -958,6 +960,20 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
           otherUser={chatUser}
           onClose={() => setChatUser(null)}
           onMessageRead={refreshUnread}
+        />
+      )}
+
+      {/* Onboarding modal — shown once on first login */}
+      {showOnboarding && (
+        <OnboardingModal
+          githubUsername={githubUsername}
+          avatarUrl={avatarUrl}
+          initialProfile={profile}
+          onComplete={(completedProfile) => {
+            setProfile(completedProfile);
+            setShowOnboarding(false);
+          }}
+          onSkip={() => setShowOnboarding(false)}
         />
       )}
     </div>
