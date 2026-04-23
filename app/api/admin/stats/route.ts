@@ -29,6 +29,7 @@ export async function GET(_request: NextRequest) {
     matchScoresRes,
     identitiesRes,
     achievementSlugsRes,
+    languagesRes,
   ] = await Promise.all([
     service.from("user_profiles").select("*", { count: "exact", head: true }),
     service.from("matches").select("*", { count: "exact", head: true }),
@@ -41,6 +42,7 @@ export async function GET(_request: NextRequest) {
     service.from("matches").select("compatibility_total"),
     service.from("user_profiles").select("coding_identity"),
     service.from("user_achievements").select("achievement_slug"),
+    service.from("user_profiles").select("languages"),
   ]);
 
   // Average compatibility score
@@ -70,6 +72,18 @@ export async function GET(_request: NextRequest) {
   const mostPopularAchievement =
     Object.entries(slugCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "—";
 
+  // Top languages across all users
+  const langCounts: Record<string, number> = {};
+  for (const row of languagesRes.data ?? []) {
+    for (const lang of (row.languages as string[] | null) ?? []) {
+      if (lang) langCounts[lang] = (langCounts[lang] ?? 0) + 1;
+    }
+  }
+  const topLanguages = Object.entries(langCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 15)
+    .map(([lang, count]) => ({ lang, count }));
+
   const stats: AdminStats = {
     totalUsers: usersCount.count ?? 0,
     totalMatches: matchesCount.count ?? 0,
@@ -79,6 +93,7 @@ export async function GET(_request: NextRequest) {
     avgCompatibilityScore,
     mostPopularCodingIdentity,
     mostPopularAchievement,
+    topLanguages,
   };
 
   return NextResponse.json({ stats });

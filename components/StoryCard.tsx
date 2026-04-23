@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useState } from "react";
 import type { StoryCard } from "@/types";
 
 interface StoryCardComponentProps {
@@ -13,6 +13,7 @@ interface StoryCardComponentProps {
 
 export function StoryCardComponent({ card, username, avatarUrl, onRegenerate, regenerating }: StoryCardComponentProps) {
   const cardRef = useRef<HTMLDivElement>(null);
+  const [copied, setCopied] = useState(false);
   const color = card.primaryColor;
 
   const downloadAsPng = useCallback(async () => {
@@ -28,6 +29,37 @@ export function StoryCardComponent({ card, username, avatarUrl, onRegenerate, re
     link.href = canvas.toDataURL("image/png");
     link.click();
   }, [username]);
+
+  const profileUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/dev/${username}`;
+
+  const shareOnTwitter = useCallback(() => {
+    const text = encodeURIComponent(`Check out my developer story card on DevMatch! ✦`);
+    const url = encodeURIComponent(profileUrl);
+    window.open(`https://twitter.com/intent/tweet?text=${text}&url=${url}`, "_blank", "noopener,noreferrer");
+  }, [profileUrl]);
+
+  const shareOnLinkedIn = useCallback(() => {
+    const url = encodeURIComponent(profileUrl);
+    window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${url}`, "_blank", "noopener,noreferrer");
+  }, [profileUrl]);
+
+  const copyLink = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(profileUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // fallback
+      const el = document.createElement("textarea");
+      el.value = profileUrl;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand("copy");
+      document.body.removeChild(el);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  }, [profileUrl]);
 
   return (
     <div style={{
@@ -158,39 +190,59 @@ export function StoryCardComponent({ card, username, avatarUrl, onRegenerate, re
         <button
           onClick={downloadAsPng}
           style={{
-            padding: "11px 24px", borderRadius: "12px", fontSize: "14px", fontWeight: 600,
+            padding: "11px 20px", borderRadius: "12px", fontSize: "13px", fontWeight: 600,
             cursor: "pointer", transition: "all 0.15s",
             background: `${color}22`, border: `1px solid ${color}55`, color,
           }}
           onMouseOver={e => { e.currentTarget.style.background = `${color}33`; e.currentTarget.style.transform = "scale(1.03)"; }}
           onMouseOut={e => { e.currentTarget.style.background = `${color}22`; e.currentTarget.style.transform = "scale(1)"; }}
         >
-          Download PNG
+          ↓ Download PNG
         </button>
         <button
-          onClick={() => {
-            if (navigator.share) {
-              navigator.share({ title: `${username}'s DevCard`, url: window.location.href });
-            } else {
-              navigator.clipboard.writeText(window.location.href);
-            }
-          }}
+          onClick={shareOnTwitter}
           style={{
-            padding: "11px 24px", borderRadius: "12px", fontSize: "14px", fontWeight: 600,
+            padding: "11px 20px", borderRadius: "12px", fontSize: "13px", fontWeight: 600,
             cursor: "pointer", transition: "all 0.15s",
-            background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#94a3b8",
+            background: "rgba(29,161,242,0.1)", border: "1px solid rgba(29,161,242,0.3)", color: "#1da1f2",
           }}
-          onMouseOver={e => { e.currentTarget.style.background = "rgba(255,255,255,0.09)"; e.currentTarget.style.transform = "scale(1.03)"; }}
-          onMouseOut={e => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; e.currentTarget.style.transform = "scale(1)"; }}
+          onMouseOver={e => { e.currentTarget.style.background = "rgba(29,161,242,0.18)"; e.currentTarget.style.transform = "scale(1.03)"; }}
+          onMouseOut={e => { e.currentTarget.style.background = "rgba(29,161,242,0.1)"; e.currentTarget.style.transform = "scale(1)"; }}
         >
-          Share
+          𝕏 Twitter
+        </button>
+        <button
+          onClick={shareOnLinkedIn}
+          style={{
+            padding: "11px 20px", borderRadius: "12px", fontSize: "13px", fontWeight: 600,
+            cursor: "pointer", transition: "all 0.15s",
+            background: "rgba(10,102,194,0.1)", border: "1px solid rgba(10,102,194,0.3)", color: "#0a66c2",
+          }}
+          onMouseOver={e => { e.currentTarget.style.background = "rgba(10,102,194,0.18)"; e.currentTarget.style.transform = "scale(1.03)"; }}
+          onMouseOut={e => { e.currentTarget.style.background = "rgba(10,102,194,0.1)"; e.currentTarget.style.transform = "scale(1)"; }}
+        >
+          in LinkedIn
+        </button>
+        <button
+          onClick={copyLink}
+          style={{
+            padding: "11px 20px", borderRadius: "12px", fontSize: "13px", fontWeight: 600,
+            cursor: "pointer", transition: "all 0.15s",
+            background: copied ? "rgba(52,211,153,0.12)" : "rgba(255,255,255,0.05)",
+            border: copied ? "1px solid rgba(52,211,153,0.4)" : "1px solid rgba(255,255,255,0.1)",
+            color: copied ? "#34d399" : "#94a3b8",
+          }}
+          onMouseOver={e => { if (!copied) { e.currentTarget.style.background = "rgba(255,255,255,0.09)"; e.currentTarget.style.transform = "scale(1.03)"; } }}
+          onMouseOut={e => { if (!copied) { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; e.currentTarget.style.transform = "scale(1)"; } }}
+        >
+          {copied ? "✓ Copied!" : "⎘ Copy Link"}
         </button>
         {onRegenerate && (
           <button
             onClick={onRegenerate}
             disabled={regenerating}
             style={{
-              padding: "11px 24px", borderRadius: "12px", fontSize: "14px", fontWeight: 600,
+              padding: "11px 20px", borderRadius: "12px", fontSize: "13px", fontWeight: 600,
               cursor: regenerating ? "not-allowed" : "pointer", transition: "all 0.15s",
               background: "rgba(124,58,237,0.1)", border: "1px solid rgba(124,58,237,0.3)",
               color: regenerating ? "#475569" : "#a78bfa",

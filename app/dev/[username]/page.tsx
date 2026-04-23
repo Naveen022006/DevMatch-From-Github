@@ -10,9 +10,25 @@ interface Props {
 
 export async function generateMetadata({ params }: Props) {
   const { username } = await params;
+  const ogUrl = `/api/og?username=${encodeURIComponent(username)}`;
+  const profileUrl = `/dev/${username}`;
   return {
     title: `${username} — DevMatch`,
     description: `View ${username}'s developer profile on DevMatch`,
+    openGraph: {
+      title: `${username} — DevMatch`,
+      description: `View ${username}'s developer story card and profile on DevMatch`,
+      url: profileUrl,
+      siteName: "DevMatch",
+      images: [{ url: ogUrl, width: 1200, height: 630, alt: `${username}'s DevMatch card` }],
+      type: "profile",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${username} — DevMatch`,
+      description: `View ${username}'s developer story card and profile on DevMatch`,
+      images: [ogUrl],
+    },
   };
 }
 

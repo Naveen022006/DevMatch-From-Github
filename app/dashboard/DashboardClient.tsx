@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import type { UserProfile, DeveloperMatch, StoryCard, UserAchievement, ConnectionRequestWithProfile, ActivityFeedItem } from "@/types";
 import type { ChallengeWithSubmission } from "@/types/admin";
 import type { LeaderboardEntry } from "@/app/api/leaderboard/route";
@@ -67,6 +67,9 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
   // ── Messaging ──────────────────────────────────────────────────────────────
   const [chatUser, setChatUser] = useState<{ id: string; username: string; avatarUrl: string } | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
+
+  // ── Tech stack filter ──────────────────────────────────────────────────────
+  const [langFilter, setLangFilter] = useState<string>("All");
 
   // ── Connection Requests ────────────────────────────────────────────────────
   const [connectionStatuses, setConnectionStatuses] = useState<Record<string, "pending" | "accepted" | "declined">>({});
@@ -404,6 +407,25 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
 
   const isLoading = (s: Tab) => loading && loadingSection === s;
 
+  // ── Derived: unique languages across all matches (sorted by frequency) ─────
+  const availableLangs = useMemo(() => {
+    const freq: Record<string, number> = {};
+    for (const m of matches) {
+      for (const lang of m.profile.languages ?? []) {
+        freq[lang] = (freq[lang] ?? 0) + 1;
+      }
+    }
+    return Object.entries(freq)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 12)
+      .map(([lang]) => lang);
+  }, [matches]);
+
+  const filteredMatches = useMemo(() => {
+    if (langFilter === "All") return matches;
+    return matches.filter((m) => (m.profile.languages ?? []).includes(langFilter));
+  }, [matches, langFilter]);
+
   return (
     <div style={S.page}>
       {/* Background */}
@@ -547,16 +569,56 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
               </EmptyState>
             ) : (
               <>
-                <p style={{ fontSize: "12px", color: "#475569", marginBottom: "4px" }}>Your top {matches.length} compatible developers</p>
-                {matches.map(m => (
-                  <MatchCard
-                    key={m.profile.id}
-                    match={m}
-                    requestStatus={connectionStatuses[m.profile.id] ?? "none"}
-                    onSendRequest={handleSendRequest}
-                    onMessage={connectionStatuses[m.profile.id] === "accepted" ? (id, username, avatarUrl) => setChatUser({ id, username, avatarUrl }) : undefined}
-                  />
-                ))}
+                {/* Filter chips */}
+                {availableLangs.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "7px", paddingBottom: "2px" }}>
+                    {["All", ...availableLangs].map((lang) => {
+                      const active = langFilter === lang;
+                      return (
+                        <button
+                          key={lang}
+                          onClick={() => setLangFilter(lang)}
+                          style={{
+                            padding: "5px 13px", borderRadius: "20px", fontSize: "12px", fontWeight: 600,
+                            cursor: "pointer", border: "none", transition: "all 0.12s",
+                            ...(active
+                              ? { background: "rgba(124,58,237,0.25)", color: "#c4b5fd", boxShadow: "0 0 0 1px rgba(124,58,237,0.4)" }
+                              : { background: "rgba(255,255,255,0.05)", color: "#64748b" }),
+                          }}
+                          onMouseOver={e => { if (!active) e.currentTarget.style.color = "#94a3b8"; }}
+                          onMouseOut={e => { if (!active) e.currentTarget.style.color = "#64748b"; }}
+                        >
+                          {lang}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <p style={{ fontSize: "12px", color: "#475569", marginBottom: "4px" }}>
+                  {langFilter === "All"
+                    ? `Your top ${matches.length} compatible developers`
+                    : `${filteredMatches.length} of ${matches.length} match ${langFilter}`}
+                </p>
+
+                {filteredMatches.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "40px 20px", color: "#475569", fontSize: "14px" }}>
+                    No matches use <strong style={{ color: "#94a3b8" }}>{langFilter}</strong>.
+                    <button onClick={() => setLangFilter("All")} style={{ display: "block", margin: "12px auto 0", fontSize: "13px", color: "#a78bfa", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
+                      Show all matches
+                    </button>
+                  </div>
+                ) : (
+                  filteredMatches.map(m => (
+                    <MatchCard
+                      key={m.profile.id}
+                      match={m}
+                      requestStatus={connectionStatuses[m.profile.id] ?? "none"}
+                      onSendRequest={handleSendRequest}
+                      onMessage={connectionStatuses[m.profile.id] === "accepted" ? (id, username, avatarUrl) => setChatUser({ id, username, avatarUrl }) : undefined}
+                    />
+                  ))
+                )}
               </>
             )}
           </div>

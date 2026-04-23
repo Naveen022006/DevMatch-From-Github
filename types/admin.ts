@@ -9,6 +9,7 @@ export interface AdminStats {
   avgCompatibilityScore: number;
   mostPopularCodingIdentity: string;
   mostPopularAchievement: string;
+  topLanguages: Array<{ lang: string; count: number }>;
 }
 
 export interface AdminUserMini {
