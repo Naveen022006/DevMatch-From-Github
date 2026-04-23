@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import type { UserProfile, DeveloperMatch, StoryCard, UserAchievement } from "@/types";
+import { useState, useEffect, useRef } from "react";
+import type { UserProfile, DeveloperMatch, StoryCard, UserAchievement, ConnectionRequestWithProfile, ActivityFeedItem } from "@/types";
 import type { ChallengeWithSubmission } from "@/types/admin";
+import type { LeaderboardEntry } from "@/app/api/leaderboard/route";
 import { MatchCard } from "@/components/MatchCard";
 import { StoryCardComponent } from "@/components/StoryCard";
 import { AchievementCard, AchievementToast } from "@/components/AchievementCard";
@@ -16,11 +17,13 @@ interface Props {
   initialProfile: UserProfile | null;
 }
 
-type Tab = "profile" | "matches" | "story" | "achievements" | "challenges";
+type Tab = "profile" | "matches" | "requests" | "feed" | "story" | "achievements" | "challenges";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "profile", label: "Profile" },
   { id: "matches", label: "Matches" },
+  { id: "requests", label: "Requests" },
+  { id: "feed", label: "Feed" },
   { id: "story", label: "Story Card" },
   { id: "achievements", label: "Achievements" },
   { id: "challenges", label: "Challenges" },
@@ -53,6 +56,9 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
   const [challenges, setChallenges] = useState<ChallengeWithSubmission[]>([]);
   const [challengeLoading, setChallengeLoading] = useState<string | null>(null); // challengeId
   const [challengeSolutions, setChallengeSolutions] = useState<Record<string, string>>({});
+  const [challengeSubTab, setChallengeSubTab] = useState<"challenges" | "leaderboard">("challenges");
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingSection, setLoadingSection] = useState<Tab | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -60,6 +66,34 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
   // ── Messaging ──────────────────────────────────────────────────────────────
   const [chatUser, setChatUser] = useState<{ id: string; username: string; avatarUrl: string } | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
+
+  // ── Connection Requests ────────────────────────────────────────────────────
+  const [connectionStatuses, setConnectionStatuses] = useState<Record<string, "pending" | "accepted" | "declined">>({});
+  const [pendingRequests, setPendingRequests] = useState<ConnectionRequestWithProfile[]>([]);
+  const [requestsLoading, setRequestsLoading] = useState(false);
+  const [pendingRequestCount, setPendingRequestCount] = useState(0);
+
+  // ── Activity Feed ──────────────────────────────────────────────────────────
+  const [feedItems, setFeedItems] = useState<ActivityFeedItem[]>([]);
+  const [feedPage, setFeedPage] = useState(1);
+  const [feedHasMore, setFeedHasMore] = useState(false);
+  const [feedLoading, setFeedLoading] = useState(false);
+
+  // ── Privacy ────────────────────────────────────────────────────────────────
+  const [isPublic, setIsPublic] = useState<boolean>(initialProfile?.is_public !== false);
+  const [privacyLoading, setPrivacyLoading] = useState(false);
+
+  // ── Refresh / Re-analysis ─────────────────────────────────────────────────
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshStep, setRefreshStep] = useState(0); // 0=idle 1=fetching 2=analyzing 3=done
+  const [cooldownSeconds, setCooldownSeconds] = useState(() => {
+    if (!initialProfile?.analysis_cached_at) return 0;
+    const remaining = Math.ceil(
+      (new Date(initialProfile.analysis_cached_at).getTime() + 24 * 3600 * 1000 - Date.now()) / 1000
+    );
+    return Math.max(0, remaining);
+  });
+  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const signOut = async () => {
     const supabase = createClient();
@@ -73,16 +107,131 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
     if (res.ok) { const j = await res.json(); setUnreadCount(j.count ?? 0); }
   };
 
+  const loadConnectionStatuses = async () => {
+    const res = await fetch("/api/connections");
+    if (res.ok) {
+      const { sent } = await res.json();
+      const map: Record<string, "pending" | "accepted" | "declined"> = {};
+      for (const s of sent ?? []) map[s.to_user_id] = s.status;
+      setConnectionStatuses(map);
+    }
+  };
+
+  const loadRequests = async () => {
+    setRequestsLoading(true);
+    const res = await fetch("/api/connections/requests");
+    if (res.ok) {
+      const { requests } = await res.json();
+      setPendingRequests(requests ?? []);
+      setPendingRequestCount((requests ?? []).length);
+    }
+    setRequestsLoading(false);
+  };
+
+  const loadFeed = async (page = 1) => {
+    setFeedLoading(true);
+    try {
+      const res = await fetch(`/api/feed?page=${page}`);
+      if (res.ok) {
+        const { items, hasMore } = await res.json();
+        setFeedItems(prev => page === 1 ? (items ?? []) : [...prev, ...(items ?? [])]);
+        setFeedHasMore(hasMore);
+        setFeedPage(page);
+      }
+    } catch { /* non-critical */ }
+    setFeedLoading(false);
+  };
+
+  const togglePrivacy = async () => {
+    setPrivacyLoading(true);
+    try {
+      const newVal = !isPublic;
+      const res = await fetch("/api/profile/visibility", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isPublic: newVal }),
+      });
+      if (res.ok) setIsPublic(newVal);
+    } catch { /* non-critical */ }
+    setPrivacyLoading(false);
+  };
+
+  // Countdown tick
+  useEffect(() => {
+    if (cooldownSeconds <= 0) return;
+    cooldownRef.current = setInterval(() => {
+      setCooldownSeconds(s => {
+        if (s <= 1) { clearInterval(cooldownRef.current!); return 0; }
+        return s - 1;
+      });
+    }, 1000);
+    return () => { if (cooldownRef.current) clearInterval(cooldownRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const runRefresh = async () => {
+    if (refreshing || cooldownSeconds > 0) return;
+    setRefreshing(true);
+    setRefreshStep(1);
+    setError(null);
+    try {
+      // Step 1: fetch GitHub + Step 2: AI re-analysis
+      const stepTimer = setTimeout(() => setRefreshStep(2), 3000);
+      const res = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ force: true }),
+      });
+      clearTimeout(stepTimer);
+      const json = await res.json();
+      if (!res.ok) {
+        if (res.status === 429 && json.cooldownUntil) {
+          const remaining = Math.ceil((new Date(json.cooldownUntil).getTime() - Date.now()) / 1000);
+          setCooldownSeconds(Math.max(0, remaining));
+        }
+        throw new Error(json.error);
+      }
+      setProfile(json.profile);
+      setRefreshStep(3);
+
+      // Regenerate story card after profile refresh
+      try {
+        const scRes = await fetch("/api/story-card", { method: "POST" });
+        if (scRes.ok) { const scJson = await scRes.json(); setStoryCard(scJson.card); }
+      } catch { /* non-critical */ }
+
+      // Update cooldown to 24h from now
+      setCooldownSeconds(24 * 3600);
+      if (cooldownRef.current) clearInterval(cooldownRef.current);
+      cooldownRef.current = setInterval(() => {
+        setCooldownSeconds(s => {
+          if (s <= 1) { clearInterval(cooldownRef.current!); return 0; }
+          return s - 1;
+        });
+      }, 1000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Refresh failed");
+    } finally {
+      setRefreshing(false);
+      setTimeout(() => setRefreshStep(0), 2000);
+    }
+  };
+
   useEffect(() => {
     refreshUnread();
+    loadRequests();
     const supabase = createClient();
     const channel = supabase
-      .channel("unread-badge")
+      .channel("dashboard-realtime")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `receiver_id=eq.${userId}` }, () => {
         setUnreadCount((c) => c + 1);
       })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages", filter: `receiver_id=eq.${userId}` }, () => {
         refreshUnread();
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "connection_requests", filter: `to_user_id=eq.${userId}` }, () => {
+        setPendingRequestCount((c) => c + 1);
+        loadRequests();
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -108,6 +257,7 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
     const json = await res.json();
     if (!res.ok) throw new Error(json.error);
     setMatches(json.matches); setTab("matches");
+    loadConnectionStatuses(); // load request statuses alongside matches
   });
 
   const loadStoryCard = () => withLoad("story", async () => {
@@ -146,17 +296,53 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
     setChallenges(json.challenges ?? []); setTab("challenges");
   });
 
-  const handleConnect = async (matchedUserId: string) => {
+  const loadLeaderboard = async () => {
+    setLeaderboardLoading(true);
+    try {
+      const res = await fetch("/api/leaderboard");
+      if (res.ok) { const j = await res.json(); setLeaderboard(j.entries ?? []); }
+    } catch { /* non-critical */ }
+    setLeaderboardLoading(false);
+  };
+
+  const handleSendRequest = async (matchedUserId: string) => {
     const match = matches.find((m) => m.profile.id === matchedUserId);
     if (!match) return;
     try {
-      const res = await fetch("/api/achievements", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ matchedUserId, compatibilityScore: match.compatibility.total }),
+      const res = await fetch("/api/connections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ toUserId: matchedUserId, compatibility: match.compatibility }),
       });
-      const json = await res.json();
-      if (json.unlocked?.length > 0) setNewAchievements(json.unlocked);
+      if (res.ok) {
+        setConnectionStatuses((prev) => ({ ...prev, [matchedUserId]: "pending" }));
+      }
     } catch { /* non-critical */ }
+  };
+
+  const handleAcceptRequest = async (requestId: string, fromUserId: string) => {
+    const res = await fetch(`/api/connections/${requestId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "accept" }),
+    });
+    if (res.ok) {
+      setPendingRequests((prev) => prev.filter((r) => r.id !== requestId));
+      setPendingRequestCount((c) => Math.max(0, c - 1));
+      setConnectionStatuses((prev) => ({ ...prev, [fromUserId]: "accepted" }));
+    }
+  };
+
+  const handleDeclineRequest = async (requestId: string) => {
+    const res = await fetch(`/api/connections/${requestId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "decline" }),
+    });
+    if (res.ok) {
+      setPendingRequests((prev) => prev.filter((r) => r.id !== requestId));
+      setPendingRequestCount((c) => Math.max(0, c - 1));
+    }
   };
 
   const handleSubmitChallenge = async (challengeId: string) => {
@@ -237,6 +423,8 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
               setTab(t.id);
               if (t.id === "challenges" && challenges.length === 0 && !loading) loadChallenges();
               if (t.id === "story" && !storyCard && !loading) loadStoryCard();
+              if (t.id === "requests") loadRequests();
+              if (t.id === "feed" && feedItems.length === 0 && !feedLoading) loadFeed(1);
             }} style={{
               flex: 1, padding: "9px 8px", borderRadius: "10px", fontSize: "13px",
               fontWeight: 600, cursor: "pointer", transition: "all 0.15s", border: "none",
@@ -247,15 +435,13 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
             }}>
               {t.label}
               {t.id === "matches" && unreadCount > 0 && (
-                <span style={{
-                  position: "absolute", top: 4, right: 4,
-                  minWidth: 16, height: 16, borderRadius: 8,
-                  background: "#ef4444",
-                  color: "#fff", fontSize: 9, fontWeight: 700,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  padding: "0 4px",
-                }}>
+                <span style={{ position: "absolute", top: 4, right: 4, minWidth: 16, height: 16, borderRadius: 8, background: "#ef4444", color: "#fff", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>
                   {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
+              {t.id === "requests" && pendingRequestCount > 0 && (
+                <span style={{ position: "absolute", top: 4, right: 4, minWidth: 16, height: 16, borderRadius: 8, background: "#f59e0b", color: "#000", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>
+                  {pendingRequestCount > 9 ? "9+" : pendingRequestCount}
                 </span>
               )}
             </button>
@@ -290,7 +476,43 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
                   <SecondaryBtn onClick={loadStoryCard} loading={loading} label="Story Card" />
                   <SecondaryBtn onClick={loadAchievements} loading={loading} label="Achievements" />
                   <SecondaryBtn onClick={loadChallenges} loading={loading} label="Challenges ⚡" />
-                  <SecondaryBtn onClick={runAnalysis} loading={loading} label="Re-analyze" small />
+                </div>
+                {/* Refresh Analysis panel */}
+                <RefreshPanel
+                  profile={profile}
+                  refreshing={refreshing}
+                  refreshStep={refreshStep}
+                  cooldownSeconds={cooldownSeconds}
+                  onRefresh={runRefresh}
+                />
+                {/* Privacy toggle */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderRadius: "12px", background: "rgba(13,13,26,0.95)", border: "1px solid rgba(255,255,255,0.08)", marginTop: "4px" }}>
+                  <div>
+                    <div style={{ fontSize: "13px", fontWeight: 600, color: "#e2e8f0" }}>Public Profile</div>
+                    <div style={{ fontSize: "11px", color: "#475569", marginTop: "2px" }}>
+                      {isPublic ? "Anyone can view your full profile" : "Only connections can view your full profile"}
+                    </div>
+                  </div>
+                  <button
+                    onClick={togglePrivacy}
+                    disabled={privacyLoading}
+                    style={{
+                      width: "44px", height: "24px", borderRadius: "12px", border: "none", cursor: privacyLoading ? "not-allowed" : "pointer", flexShrink: 0,
+                      background: isPublic ? "rgba(52,211,153,0.25)" : "rgba(255,255,255,0.08)",
+                      position: "relative", transition: "background 0.2s",
+                    }}
+                  >
+                    <span style={{
+                      position: "absolute", top: "3px", width: "18px", height: "18px", borderRadius: "50%",
+                      background: isPublic ? "#34d399" : "#475569",
+                      left: isPublic ? "23px" : "3px",
+                      transition: "left 0.2s, background 0.2s",
+                    }} />
+                  </button>
+                </div>
+                {/* Public profile link */}
+                <div style={{ fontSize: "12px", color: "#475569" }}>
+                  Your profile: <a href={`/dev/${githubUsername}`} style={{ color: "#a78bfa", textDecoration: "none" }}>/dev/{githubUsername}</a>
                 </div>
               </>
             )}
@@ -307,8 +529,134 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
             ) : (
               <>
                 <p style={{ fontSize: "12px", color: "#475569", marginBottom: "4px" }}>Your top {matches.length} compatible developers</p>
-                {matches.map(m => <MatchCard key={m.profile.id} match={m} onConnect={handleConnect} onMessage={(id, username, avatarUrl) => setChatUser({ id, username, avatarUrl })} />)}
+                {matches.map(m => (
+                  <MatchCard
+                    key={m.profile.id}
+                    match={m}
+                    requestStatus={connectionStatuses[m.profile.id] ?? "none"}
+                    onSendRequest={handleSendRequest}
+                    onMessage={connectionStatuses[m.profile.id] === "accepted" ? (id, username, avatarUrl) => setChatUser({ id, username, avatarUrl }) : undefined}
+                  />
+                ))}
               </>
+            )}
+          </div>
+        )}
+
+        {/* ── Requests Tab ── */}
+        {tab === "requests" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
+              <div>
+                <div style={{ fontSize: "16px", fontWeight: 700, color: "#f1f5f9" }}>Connection Requests</div>
+                <div style={{ fontSize: "12px", color: "#475569", marginTop: "2px" }}>
+                  {requestsLoading ? "Loading…" : `${pendingRequests.length} pending`}
+                </div>
+              </div>
+              <button onClick={loadRequests} disabled={requestsLoading} style={{ fontSize: "12px", color: "#475569", background: "none", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "8px", cursor: "pointer", padding: "5px 10px" }}>
+                Refresh
+              </button>
+            </div>
+
+            {requestsLoading && <><RequestSkeleton /><RequestSkeleton /></>}
+
+            {!requestsLoading && pendingRequests.length === 0 && (
+              <EmptyState icon="🤝" title="No pending requests" desc="When other developers send you connection requests, they'll appear here.">
+                <SecondaryBtn onClick={() => setTab("matches")} loading={false} label="Find Matches" />
+              </EmptyState>
+            )}
+
+            {!requestsLoading && pendingRequests.map((req) => {
+              const p = req.from_profile;
+              const identityColor: Record<string, string> = { builder: "#f59e0b", learner: "#34d399", maintainer: "#60a5fa", explorer: "#f472b6" };
+              const ic = identityColor[p.coding_identity] ?? "#a78bfa";
+              return (
+                <div key={req.id} style={{ background: "rgba(13,13,26,0.95)", border: "1px solid rgba(255,255,255,0.09)", borderRadius: "18px", padding: "20px 22px", display: "flex", flexDirection: "column", gap: "14px" }}>
+                  {/* Profile row */}
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={p.avatar_url} alt={p.github_username} style={{ width: "48px", height: "48px", borderRadius: "50%", border: `2px solid ${ic}55`, flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: "15px", color: "#f1f5f9", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {p.display_name ?? p.github_username}
+                      </div>
+                      <div style={{ fontSize: "12px", color: "#475569", fontFamily: "monospace" }}>@{p.github_username}</div>
+                      <div style={{ display: "flex", gap: "6px", marginTop: "5px", flexWrap: "wrap" }}>
+                        <span style={{ fontSize: "11px", padding: "2px 9px", borderRadius: "20px", background: `${ic}18`, border: `1px solid ${ic}33`, color: ic, fontWeight: 600, textTransform: "capitalize" }}>{p.coding_identity}</span>
+                        <span style={{ fontSize: "11px", padding: "2px 9px", borderRadius: "20px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#64748b", textTransform: "capitalize" }}>{p.experience_level}</span>
+                        {p.languages.slice(0, 3).map(l => (
+                          <span key={l} style={{ fontSize: "11px", padding: "2px 9px", borderRadius: "20px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#94a3b8" }}>{l}</span>
+                        ))}
+                      </div>
+                    </div>
+                    {req.compatibility_score && (
+                      <div style={{ textAlign: "center", flexShrink: 0, padding: "8px 14px", borderRadius: "12px", background: "rgba(124,58,237,0.1)", border: "1px solid rgba(124,58,237,0.2)" }}>
+                        <div style={{ fontSize: "22px", fontWeight: 800, color: "#a78bfa", lineHeight: 1 }}>{req.compatibility_score}</div>
+                        <div style={{ fontSize: "9px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", marginTop: "2px" }}>match</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Actions */}
+                  <div style={{ display: "flex", gap: "10px" }}>
+                    <button
+                      onClick={() => handleAcceptRequest(req.id, req.from_user_id)}
+                      style={{ flex: 1, padding: "10px", borderRadius: "12px", border: "none", background: "linear-gradient(135deg, #059669, #047857)", color: "#fff", fontWeight: 700, fontSize: "14px", cursor: "pointer" }}
+                      onMouseOver={e => (e.currentTarget.style.opacity = "0.9")}
+                      onMouseOut={e => (e.currentTarget.style.opacity = "1")}
+                    >
+                      ✓ Accept
+                    </button>
+                    <button
+                      onClick={() => handleDeclineRequest(req.id)}
+                      style={{ flex: 1, padding: "10px", borderRadius: "12px", border: "1px solid rgba(239,68,68,0.3)", background: "transparent", color: "#f87171", fontWeight: 600, fontSize: "14px", cursor: "pointer" }}
+                      onMouseOver={e => (e.currentTarget.style.background = "rgba(239,68,68,0.08)")}
+                      onMouseOut={e => (e.currentTarget.style.background = "transparent")}
+                    >
+                      ✕ Decline
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── Feed Tab ── */}
+        {tab === "feed" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
+              <div>
+                <div style={{ fontSize: "16px", fontWeight: 700, color: "#f1f5f9" }}>Activity Feed</div>
+                <div style={{ fontSize: "12px", color: "#475569", marginTop: "2px" }}>What developers are up to</div>
+              </div>
+              <button onClick={() => loadFeed(1)} disabled={feedLoading} style={{ fontSize: "12px", color: "#475569", background: "none", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "8px", cursor: "pointer", padding: "5px 10px" }}>
+                Refresh
+              </button>
+            </div>
+
+            {feedLoading && feedItems.length === 0 && (
+              <><FeedSkeleton /><FeedSkeleton /><FeedSkeleton /></>
+            )}
+
+            {!feedLoading && feedItems.length === 0 && (
+              <EmptyState icon="◈" title="No activity yet" desc="Activity from developers will appear here as people join, connect, and complete challenges.">
+                <SecondaryBtn onClick={() => loadFeed(1)} loading={feedLoading} label="Refresh" />
+              </EmptyState>
+            )}
+
+            {feedItems.map(item => (
+              <FeedCard key={item.id} item={item} />
+            ))}
+
+            {feedHasMore && (
+              <button
+                onClick={() => loadFeed(feedPage + 1)}
+                disabled={feedLoading}
+                style={{ width: "100%", padding: "12px", borderRadius: "12px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", color: feedLoading ? "#475569" : "#94a3b8", fontWeight: 600, fontSize: "14px", cursor: feedLoading ? "not-allowed" : "pointer" }}
+              >
+                {feedLoading ? "Loading…" : "Load More"}
+              </button>
             )}
           </div>
         )}
@@ -348,127 +696,156 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
         {/* ── Challenges Tab ── */}
         {tab === "challenges" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-            {isLoading("challenges") ? (
-              <><ChallengeSkeleton /><ChallengeSkeleton /></>
-            ) : challenges.length === 0 ? (
-              <EmptyState icon="⚡" title="No challenges yet" desc="The admin hasn't posted any challenges yet. Check back soon!">
-                <SecondaryBtn onClick={loadChallenges} loading={loading} label="Refresh" />
-              </EmptyState>
-            ) : (
+
+            {/* Sub-tab bar */}
+            <div style={{ display: "flex", gap: "4px", padding: "4px", background: "rgba(13,13,26,0.9)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "12px" }}>
+              {(["challenges", "leaderboard"] as const).map((st) => (
+                <button key={st} onClick={() => {
+                  setChallengeSubTab(st);
+                  if (st === "challenges" && challenges.length === 0 && !loading) loadChallenges();
+                  if (st === "leaderboard" && leaderboard.length === 0 && !leaderboardLoading) loadLeaderboard();
+                }} style={{
+                  flex: 1, padding: "8px", borderRadius: "9px", fontSize: "13px", fontWeight: 600,
+                  cursor: "pointer", transition: "all 0.15s", border: "none",
+                  ...(challengeSubTab === st
+                    ? { background: "rgba(124,58,237,0.2)", color: "#c4b5fd", boxShadow: "0 0 0 1px rgba(124,58,237,0.3)" }
+                    : { background: "transparent", color: "#475569" }),
+                }}>
+                  {st === "challenges" ? "⚡ Challenges" : "🏆 Leaderboard"}
+                </button>
+              ))}
+            </div>
+
+            {/* ── Challenges sub-tab ── */}
+            {challengeSubTab === "challenges" && (
               <>
-                <p style={{ fontSize: "12px", color: "#475569", marginBottom: "4px" }}>
-                  Solve challenges to earn the <span style={{ color: "#fbbf24" }}>Challenge Complete 🏆</span> achievement
-                </p>
-                {challenges.map((c) => {
-                  const diffColor: Record<string, string> = { easy: "#34d399", medium: "#fbbf24", hard: "#f87171" };
-                  const dc = diffColor[c.difficulty] ?? "#a78bfa";
-                  const sub = c.submission;
-                  const alreadySolved = sub?.is_correct === true;
+                {isLoading("challenges") ? (
+                  <><ChallengeSkeleton /><ChallengeSkeleton /></>
+                ) : challenges.length === 0 ? (
+                  <EmptyState icon="⚡" title="No challenges yet" desc="The admin hasn't posted any challenges yet. Check back soon!">
+                    <SecondaryBtn onClick={loadChallenges} loading={loading} label="Refresh" />
+                  </EmptyState>
+                ) : (
+                  <>
+                    <p style={{ fontSize: "12px", color: "#475569", marginBottom: "4px" }}>
+                      Solve challenges to earn the <span style={{ color: "#fbbf24" }}>Challenge Complete 🏆</span> achievement
+                    </p>
+                    {challenges.map((c) => {
+                      const diffColor: Record<string, string> = { easy: "#34d399", medium: "#fbbf24", hard: "#f87171" };
+                      const dc = diffColor[c.difficulty] ?? "#a78bfa";
+                      const sub = c.submission;
+                      const alreadySolved = sub?.is_correct === true;
 
-                  return (
-                    <div
-                      key={c.id}
-                      style={{
-                        background: "rgba(13,13,26,0.95)",
-                        border: `1px solid ${alreadySolved ? "rgba(52,211,153,0.3)" : "rgba(255,255,255,0.09)"}`,
-                        borderRadius: "18px",
-                        padding: "20px 22px",
-                        boxShadow: alreadySolved ? "0 0 24px rgba(52,211,153,0.06)" : "none",
-                      }}
-                    >
-                      {/* Header */}
-                      <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 12 }}>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
-                            <span style={{ fontSize: 16, fontWeight: 700, color: "#f1f5f9" }}>{c.title}</span>
-                            {alreadySolved && <span style={{ fontSize: 14 }}>✅</span>}
-                          </div>
-                          <span style={{ padding: "2px 9px", borderRadius: 4, background: `${dc}18`, border: `1px solid ${dc}35`, color: dc, fontSize: 11, fontWeight: 700, textTransform: "capitalize" }}>
-                            {c.difficulty}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Problem statement */}
-                      <div style={{ marginBottom: 16, padding: "14px 16px", borderRadius: 10, background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.15)" }}>
-                        <div style={{ fontSize: 10, color: "#7c3aed", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>
-                          Problem Statement
-                        </div>
-                        <p style={{ margin: 0, fontSize: 14, color: "#94a3b8", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{c.description}</p>
-                      </div>
-
-                      {/* Previous feedback */}
-                      {sub && (
-                        <div style={{ marginBottom: 14, padding: "12px 14px", borderRadius: 10, background: sub.is_correct ? "rgba(52,211,153,0.07)" : "rgba(239,68,68,0.07)", border: `1px solid ${sub.is_correct ? "rgba(52,211,153,0.2)" : "rgba(239,68,68,0.2)"}` }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                            <span style={{ fontSize: 12, fontWeight: 700, color: sub.is_correct ? "#34d399" : "#f87171" }}>
-                              {sub.is_correct ? "✓ Correct — Well done!" : "✗ Not quite right"}
-                            </span>
-                            {sub.admin_override !== null && sub.admin_override !== undefined && (
-                              <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 3, background: "rgba(167,139,250,0.15)", color: "#a78bfa", fontWeight: 600 }}>
-                                Admin reviewed
+                      return (
+                        <div
+                          key={c.id}
+                          style={{
+                            background: "rgba(13,13,26,0.95)",
+                            border: `1px solid ${alreadySolved ? "rgba(52,211,153,0.3)" : "rgba(255,255,255,0.09)"}`,
+                            borderRadius: "18px",
+                            padding: "20px 22px",
+                            boxShadow: alreadySolved ? "0 0 24px rgba(52,211,153,0.06)" : "none",
+                          }}
+                        >
+                          {/* Header */}
+                          <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 12 }}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
+                                <span style={{ fontSize: 16, fontWeight: 700, color: "#f1f5f9" }}>{c.title}</span>
+                                {alreadySolved && <span style={{ fontSize: 14 }}>✅</span>}
+                              </div>
+                              <span style={{ padding: "2px 9px", borderRadius: 4, background: `${dc}18`, border: `1px solid ${dc}35`, color: dc, fontSize: 11, fontWeight: 700, textTransform: "capitalize" }}>
+                                {c.difficulty}
                               </span>
-                            )}
+                            </div>
                           </div>
-                          <div style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.6 }}>
-                            {sub.admin_feedback ?? sub.ai_feedback}
+
+                          {/* Problem statement */}
+                          <div style={{ marginBottom: 16, padding: "14px 16px", borderRadius: 10, background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.15)" }}>
+                            <div style={{ fontSize: 10, color: "#7c3aed", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>
+                              Problem Statement
+                            </div>
+                            <p style={{ margin: 0, fontSize: 14, color: "#94a3b8", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{c.description}</p>
                           </div>
-                          {sub.repo_url && (
-                            <a href={sub.repo_url} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 8, fontSize: 11, color: "#64748b", textDecoration: "none" }}>
-                              🔗 {sub.repo_url}
-                            </a>
+
+                          {/* Previous feedback */}
+                          {sub && (
+                            <div style={{ marginBottom: 14, padding: "12px 14px", borderRadius: 10, background: sub.is_correct ? "rgba(52,211,153,0.07)" : "rgba(239,68,68,0.07)", border: `1px solid ${sub.is_correct ? "rgba(52,211,153,0.2)" : "rgba(239,68,68,0.2)"}` }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                                <span style={{ fontSize: 12, fontWeight: 700, color: sub.is_correct ? "#34d399" : "#f87171" }}>
+                                  {sub.is_correct ? "✓ Correct — Well done!" : "✗ Not quite right"}
+                                </span>
+                                {sub.admin_override !== null && sub.admin_override !== undefined && (
+                                  <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 3, background: "rgba(167,139,250,0.15)", color: "#a78bfa", fontWeight: 600 }}>
+                                    Admin reviewed
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.6 }}>
+                                {sub.admin_feedback ?? sub.ai_feedback}
+                              </div>
+                              {sub.repo_url && (
+                                <a href={sub.repo_url} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 8, fontSize: 11, color: "#64748b", textDecoration: "none" }}>
+                                  🔗 {sub.repo_url}
+                                </a>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Submission form */}
+                          {!alreadySolved && (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                              <div style={{ padding: "10px 14px", borderRadius: 8, background: "rgba(34,211,238,0.05)", border: "1px solid rgba(34,211,238,0.12)", fontSize: 12, color: "#64748b", lineHeight: 1.6 }}>
+                                <span style={{ color: "#22d3ee", fontWeight: 600 }}>How to submit:</span> Build your solution in a <strong style={{ color: "#94a3b8" }}>public GitHub repository</strong>, then paste the repo URL below. The AI will clone and evaluate your code.
+                              </div>
+                              <label style={{ fontSize: 11, color: "#475569", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                                GitHub Repository URL
+                              </label>
+                              <input
+                                type="url"
+                                placeholder="https://github.com/your-username/your-repo"
+                                value={challengeSolutions[c.id] ?? (sub?.repo_url ?? "")}
+                                onChange={(e) => setChallengeSolutions((prev) => ({ ...prev, [c.id]: e.target.value }))}
+                                style={{ padding: "12px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "#e2e8f0", fontSize: 14, outline: "none", fontFamily: "monospace" }}
+                              />
+                              <button
+                                onClick={() => handleSubmitChallenge(c.id)}
+                                disabled={challengeLoading === c.id || !(challengeSolutions[c.id] ?? "").trim()}
+                                style={{
+                                  alignSelf: "flex-start", padding: "10px 22px", borderRadius: 12, border: "none",
+                                  background: challengeLoading === c.id || !(challengeSolutions[c.id] ?? "").trim()
+                                    ? "rgba(124,58,237,0.2)" : "linear-gradient(135deg, #7c3aed, #4f46e5)",
+                                  color: challengeLoading === c.id || !(challengeSolutions[c.id] ?? "").trim() ? "#475569" : "#fff",
+                                  cursor: challengeLoading === c.id ? "not-allowed" : "pointer",
+                                  fontSize: 14, fontWeight: 700,
+                                  display: "flex", alignItems: "center", gap: 8,
+                                  boxShadow: !(challengeSolutions[c.id] ?? "").trim() ? "none" : "0 0 20px rgba(124,58,237,0.3)",
+                                }}
+                              >
+                                {challengeLoading === c.id ? (
+                                  <><span className="spinner" style={{ width: 14, height: 14 }} />AI is evaluating…</>
+                                ) : sub ? "Try Again" : "Submit Solution"}
+                              </button>
+                            </div>
+                          )}
+
+                          {alreadySolved && (
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderRadius: 10, background: "rgba(52,211,153,0.08)" }}>
+                              <span style={{ fontSize: 16 }}>🏆</span>
+                              <span style={{ fontSize: 13, color: "#34d399", fontWeight: 600 }}>Challenge solved! Achievement unlocked.</span>
+                            </div>
                           )}
                         </div>
-                      )}
-
-                      {/* Submission form */}
-                      {!alreadySolved && (
-                        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                          {/* Instructions */}
-                          <div style={{ padding: "10px 14px", borderRadius: 8, background: "rgba(34,211,238,0.05)", border: "1px solid rgba(34,211,238,0.12)", fontSize: 12, color: "#64748b", lineHeight: 1.6 }}>
-                            <span style={{ color: "#22d3ee", fontWeight: 600 }}>How to submit:</span> Build your solution in a <strong style={{ color: "#94a3b8" }}>public GitHub repository</strong>, then paste the repo URL below. The AI will clone and evaluate your code.
-                          </div>
-                          <label style={{ fontSize: 11, color: "#475569", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>
-                            GitHub Repository URL
-                          </label>
-                          <input
-                            type="url"
-                            placeholder="https://github.com/your-username/your-repo"
-                            value={challengeSolutions[c.id] ?? (sub?.repo_url ?? "")}
-                            onChange={(e) => setChallengeSolutions((prev) => ({ ...prev, [c.id]: e.target.value }))}
-                            style={{ padding: "12px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "#e2e8f0", fontSize: 14, outline: "none", fontFamily: "monospace" }}
-                          />
-                          <button
-                            onClick={() => handleSubmitChallenge(c.id)}
-                            disabled={challengeLoading === c.id || !(challengeSolutions[c.id] ?? "").trim()}
-                            style={{
-                              alignSelf: "flex-start", padding: "10px 22px", borderRadius: 12, border: "none",
-                              background: challengeLoading === c.id || !(challengeSolutions[c.id] ?? "").trim()
-                                ? "rgba(124,58,237,0.2)" : "linear-gradient(135deg, #7c3aed, #4f46e5)",
-                              color: challengeLoading === c.id || !(challengeSolutions[c.id] ?? "").trim() ? "#475569" : "#fff",
-                              cursor: challengeLoading === c.id ? "not-allowed" : "pointer",
-                              fontSize: 14, fontWeight: 700,
-                              display: "flex", alignItems: "center", gap: 8,
-                              boxShadow: !(challengeSolutions[c.id] ?? "").trim() ? "none" : "0 0 20px rgba(124,58,237,0.3)",
-                            }}
-                          >
-                            {challengeLoading === c.id ? (
-                              <><span className="spinner" style={{ width: 14, height: 14 }} />AI is evaluating…</>
-                            ) : sub ? "Try Again" : "Submit Solution"}
-                          </button>
-                        </div>
-                      )}
-
-                      {alreadySolved && (
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderRadius: 10, background: "rgba(52,211,153,0.08)" }}>
-                          <span style={{ fontSize: 16 }}>🏆</span>
-                          <span style={{ fontSize: 13, color: "#34d399", fontWeight: 600 }}>Challenge solved! Achievement unlocked.</span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                      );
+                    })}
+                  </>
+                )}
               </>
+            )}
+
+            {/* ── Leaderboard sub-tab ── */}
+            {challengeSubTab === "leaderboard" && (
+              <LeaderboardPanel entries={leaderboard} loading={leaderboardLoading} onRefresh={loadLeaderboard} />
             )}
           </div>
         )}
@@ -708,3 +1085,311 @@ function ChallengeSkeleton() {
     </div>
   );
 }
+
+function RequestSkeleton() {
+  return (
+    <div style={{ background: "rgba(13,13,26,0.95)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "18px", padding: "20px 22px", display: "flex", flexDirection: "column", gap: "14px" }}>
+      <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+        <div className="skeleton" style={{ width: "48px", height: "48px", borderRadius: "50%", flexShrink: 0 }} />
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "7px" }}>
+          <div className="skeleton" style={{ height: "15px", width: "140px", borderRadius: "6px" }} />
+          <div className="skeleton" style={{ height: "11px", width: "100px", borderRadius: "6px" }} />
+          <div style={{ display: "flex", gap: "6px" }}>
+            {[64, 72, 56].map((w, i) => <div key={i} className="skeleton" style={{ height: "18px", width: `${w}px`, borderRadius: "20px" }} />)}
+          </div>
+        </div>
+        <div className="skeleton" style={{ width: "56px", height: "56px", borderRadius: "12px", flexShrink: 0 }} />
+      </div>
+      <div style={{ display: "flex", gap: "10px" }}>
+        <div className="skeleton" style={{ flex: 1, height: "40px", borderRadius: "12px" }} />
+        <div className="skeleton" style={{ flex: 1, height: "40px", borderRadius: "12px" }} />
+      </div>
+    </div>
+  );
+}
+
+function FeedSkeleton() {
+  return (
+    <div style={{ background: "rgba(13,13,26,0.95)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "14px", padding: "14px 16px", display: "flex", gap: "12px", alignItems: "center" }}>
+      <div className="skeleton" style={{ width: "36px", height: "36px", borderRadius: "50%", flexShrink: 0 }} />
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "7px" }}>
+        <div className="skeleton" style={{ height: "13px", width: "60%", borderRadius: "6px" }} />
+        <div className="skeleton" style={{ height: "11px", width: "35%", borderRadius: "6px" }} />
+      </div>
+    </div>
+  );
+}
+
+function FeedCard({ item }: { item: import("@/types").ActivityFeedItem }) {
+  const actionLabels: Record<string, string> = {
+    joined: "joined DevMatch",
+    connected: "connected with",
+    achievement: "unlocked an achievement",
+    challenge: "solved a challenge",
+  };
+
+  const actionColors: Record<string, string> = {
+    joined: "#34d399",
+    connected: "#a78bfa",
+    achievement: "#fbbf24",
+    challenge: "#22d3ee",
+  };
+
+  const color = actionColors[item.action_type] ?? "#94a3b8";
+  const timeAgo = (() => {
+    const diff = Date.now() - new Date(item.created_at).getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    return `${Math.floor(h / 24)}d ago`;
+  })();
+
+  return (
+    <div style={{ background: "rgba(13,13,26,0.95)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "14px", padding: "14px 16px", display: "flex", gap: "12px", alignItems: "flex-start" }}>
+      <a href={`/dev/${item.actor.github_username}`}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={item.actor.avatar_url} alt={item.actor.github_username} style={{ width: "36px", height: "36px", borderRadius: "50%", border: `1.5px solid ${color}44`, flexShrink: 0, display: "block" }} />
+      </a>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: "13px", color: "#e2e8f0", lineHeight: 1.5 }}>
+          <a href={`/dev/${item.actor.github_username}`} style={{ color: "#f1f5f9", fontWeight: 700, textDecoration: "none" }}>
+            {item.actor.display_name ?? item.actor.github_username}
+          </a>
+          {" "}
+          <span style={{ color: color }}>{actionLabels[item.action_type] ?? item.action_type}</span>
+          {item.target && item.action_type === "connected" && (
+            <>
+              {" "}
+              <a href={`/dev/${item.target.github_username}`} style={{ color: "#f1f5f9", fontWeight: 700, textDecoration: "none" }}>
+                {item.target.display_name ?? item.target.github_username}
+              </a>
+            </>
+          )}
+          {item.action_type === "achievement" && item.metadata?.name && (
+            <span style={{ color: "#64748b" }}> — {item.metadata.icon as string} {item.metadata.name as string}</span>
+          )}
+          {item.action_type === "challenge" && item.metadata?.title && (
+            <span style={{ color: "#64748b" }}> — {item.metadata.title as string}</span>
+          )}
+        </div>
+        <div style={{ fontSize: "11px", color: "#475569", marginTop: "3px" }}>{timeAgo}</div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Refresh Analysis Panel ─────────────────────────────────────────────────── */
+interface RefreshPanelProps {
+  profile: UserProfile;
+  refreshing: boolean;
+  refreshStep: number;
+  cooldownSeconds: number;
+  onRefresh: () => void;
+}
+
+function RefreshPanel({ profile, refreshing, refreshStep, cooldownSeconds, onRefresh }: RefreshPanelProps) {
+  const lastAnalyzed = profile.analysis_cached_at
+    ? (() => {
+        const diff = Date.now() - new Date(profile.analysis_cached_at).getTime();
+        const m = Math.floor(diff / 60000);
+        if (m < 60) return `${m}m ago`;
+        const h = Math.floor(m / 60);
+        if (h < 24) return `${h}h ago`;
+        return `${Math.floor(h / 24)}d ago`;
+      })()
+    : "never";
+
+  const fmtCountdown = (s: number) => {
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m`;
+    if (m > 0) return `${m}m ${String(sec).padStart(2, "0")}s`;
+    return `${sec}s`;
+  };
+
+  const steps = ["Fetching GitHub data…", "AI re-analyzing…", "Profile updated ✓"];
+  const inCooldown = cooldownSeconds > 0;
+
+  return (
+    <div style={{
+      padding: "16px 18px", borderRadius: "14px",
+      background: "rgba(13,13,26,0.95)", border: "1px solid rgba(255,255,255,0.08)",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontSize: "13px", fontWeight: 600, color: "#e2e8f0" }}>Profile Analysis</div>
+          <div style={{ fontSize: "11px", color: "#475569", marginTop: "2px" }}>
+            Last analyzed: <span style={{ color: "#64748b" }}>{lastAnalyzed}</span>
+            {inCooldown && !refreshing && (
+              <span style={{ color: "#f59e0b", marginLeft: "8px" }}>· Available in {fmtCountdown(cooldownSeconds)}</span>
+            )}
+          </div>
+        </div>
+
+        <button
+          onClick={onRefresh}
+          disabled={refreshing || inCooldown}
+          style={{
+            padding: "9px 18px", borderRadius: "10px", fontSize: "13px", fontWeight: 700,
+            cursor: refreshing || inCooldown ? "not-allowed" : "pointer",
+            transition: "all 0.15s", border: "none", flexShrink: 0,
+            ...(inCooldown
+              ? { background: "rgba(255,255,255,0.04)", color: "#334155" }
+              : refreshing
+              ? { background: "rgba(124,58,237,0.15)", color: "#a78bfa" }
+              : { background: "linear-gradient(135deg, rgba(124,58,237,0.25), rgba(79,70,229,0.2))", color: "#c4b5fd", boxShadow: "0 0 16px rgba(124,58,237,0.15)" }),
+          }}
+        >
+          {refreshing ? (
+            <span style={{ display: "flex", alignItems: "center", gap: "7px" }}>
+              <span style={{ width: 12, height: 12, border: "2px solid rgba(167,139,250,0.3)", borderTopColor: "#a78bfa", borderRadius: "50%", display: "inline-block", animation: "spin 0.8s linear infinite" }} />
+              Refreshing…
+            </span>
+          ) : inCooldown ? (
+            `⏳ ${fmtCountdown(cooldownSeconds)}`
+          ) : (
+            "↻ Refresh Analysis"
+          )}
+        </button>
+      </div>
+
+      {/* Progress steps */}
+      {refreshing && refreshStep > 0 && (
+        <div style={{ marginTop: "14px", display: "flex", flexDirection: "column", gap: "8px" }}>
+          {steps.map((label, i) => {
+            const stepNum = i + 1;
+            const done = refreshStep > stepNum;
+            const active = refreshStep === stepNum;
+            return (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div style={{
+                  width: 20, height: 20, borderRadius: "50%", flexShrink: 0,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: "9px", fontWeight: 700,
+                  ...(done
+                    ? { background: "rgba(52,211,153,0.2)", border: "1px solid rgba(52,211,153,0.4)", color: "#34d399" }
+                    : active
+                    ? { background: "rgba(167,139,250,0.2)", border: "1px solid rgba(167,139,250,0.4)", color: "#a78bfa" }
+                    : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#334155" }),
+                }}>
+                  {done ? "✓" : stepNum}
+                </div>
+                <span style={{ fontSize: "12px", color: done ? "#34d399" : active ? "#a78bfa" : "#334155", transition: "color 0.3s" }}>
+                  {label}
+                </span>
+                {active && (
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#a78bfa", animation: "pulse-ring 1s ease-in-out infinite", flexShrink: 0 }} />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Done state */}
+      {!refreshing && refreshStep === 3 && (
+        <div style={{ marginTop: "10px", fontSize: "12px", color: "#34d399", display: "flex", alignItems: "center", gap: "6px" }}>
+          ✓ Profile refreshed — story card regenerated
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Leaderboard Panel ────────────────────────────────────────────────────── */
+function LeaderboardPanel({ entries, loading, onRefresh }: {
+  entries: LeaderboardEntry[];
+  loading: boolean;
+  onRefresh: () => void;
+}) {
+  const medals = ["🥇", "🥈", "🥉"];
+  const medalColors = ["#fbbf24", "#94a3b8", "#cd7c2f"];
+
+  const fmtHrs = (h: number | null) => {
+    if (h === null) return "—";
+    if (h < 1) return `${Math.round(h * 60)}m`;
+    return `${h.toFixed(1)}h`;
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ fontSize: "12px", color: "#475569" }}>
+          {loading ? "Loading…" : `${entries.length} developer${entries.length !== 1 ? "s" : ""} on the board`}
+        </div>
+        <button onClick={onRefresh} disabled={loading} style={{ fontSize: "12px", color: "#475569", background: "none", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "8px", cursor: "pointer", padding: "5px 10px" }}>
+          Refresh
+        </button>
+      </div>
+
+      {loading && <><FeedSkeleton /><FeedSkeleton /><FeedSkeleton /></>}
+
+      {!loading && entries.length === 0 && (
+        <div style={{ textAlign: "center", padding: "40px 20px", color: "#475569", fontSize: "14px" }}>
+          No one has solved a challenge yet. Be first!
+        </div>
+      )}
+
+      {entries.map((e) => {
+        const isMedal = e.rank <= 3;
+        const medalColor = isMedal ? medalColors[e.rank - 1] : null;
+        return (
+          <a key={e.user_id} href={`/dev/${e.github_username}`} style={{ textDecoration: "none" }}>
+            <div style={{
+              background: "rgba(13,13,26,0.95)",
+              border: `1px solid ${isMedal ? `${medalColor}33` : "rgba(255,255,255,0.08)"}`,
+              borderRadius: "16px", padding: "14px 16px",
+              display: "flex", alignItems: "center", gap: "14px",
+              boxShadow: isMedal ? `0 0 20px ${medalColor}0d` : "none",
+              transition: "transform 0.12s",
+              cursor: "pointer",
+            }}
+              onMouseEnter={e2 => (e2.currentTarget as HTMLDivElement).style.transform = "translateY(-1px)"}
+              onMouseLeave={e2 => (e2.currentTarget as HTMLDivElement).style.transform = "translateY(0)"}
+            >
+              {/* Rank */}
+              <div style={{ width: "28px", textAlign: "center", flexShrink: 0 }}>
+                {isMedal ? (
+                  <span style={{ fontSize: "20px" }}>{medals[e.rank - 1]}</span>
+                ) : (
+                  <span style={{ fontSize: "13px", fontWeight: 700, color: "#475569" }}>#{e.rank}</span>
+                )}
+              </div>
+
+              {/* Avatar */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={e.avatar_url} alt={e.github_username} style={{ width: "38px", height: "38px", borderRadius: "50%", border: `2px solid ${medalColor ? `${medalColor}55` : "rgba(255,255,255,0.1)"}`, flexShrink: 0 }} />
+
+              {/* Name + stats */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: "14px", color: "#f1f5f9", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {e.display_name ?? e.github_username}
+                </div>
+                <div style={{ display: "flex", gap: "8px", marginTop: "4px", flexWrap: "wrap" }}>
+                  {e.easy_count > 0 && <span style={{ fontSize: "11px", padding: "1px 7px", borderRadius: "10px", background: "rgba(52,211,153,0.12)", border: "1px solid rgba(52,211,153,0.25)", color: "#34d399" }}>{e.easy_count} easy</span>}
+                  {e.medium_count > 0 && <span style={{ fontSize: "11px", padding: "1px 7px", borderRadius: "10px", background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.25)", color: "#fbbf24" }}>{e.medium_count} medium</span>}
+                  {e.hard_count > 0 && <span style={{ fontSize: "11px", padding: "1px 7px", borderRadius: "10px", background: "rgba(248,113,113,0.12)", border: "1px solid rgba(248,113,113,0.25)", color: "#f87171" }}>{e.hard_count} hard</span>}
+                  {e.streak > 0 && <span style={{ fontSize: "11px", padding: "1px 7px", borderRadius: "10px", background: "rgba(167,139,250,0.12)", border: "1px solid rgba(167,139,250,0.25)", color: "#a78bfa" }}>🔥 {e.streak}d streak</span>}
+                </div>
+              </div>
+
+              {/* Total score + fastest */}
+              <div style={{ textAlign: "right", flexShrink: 0 }}>
+                <div style={{ fontSize: "20px", fontWeight: 800, color: medalColor ?? "#64748b", lineHeight: 1 }}>{e.total_completed}</div>
+                <div style={{ fontSize: "10px", color: "#475569", marginTop: "2px", textTransform: "uppercase", letterSpacing: "0.06em" }}>solved</div>
+                {(e.fastest_hard_hrs !== null || e.fastest_medium_hrs !== null || e.fastest_easy_hrs !== null) && (
+                  <div style={{ fontSize: "10px", color: "#334155", marginTop: "3px" }}>
+                    fastest {fmtHrs(e.fastest_hard_hrs ?? e.fastest_medium_hrs ?? e.fastest_easy_hrs)}
+                  </div>
+                )}
+              </div>
+            </div>
+          </a>
+        );
+      })}
+    </div>
+  );
+}
+

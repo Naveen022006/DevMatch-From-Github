@@ -9,6 +9,7 @@ import UsersTab from "./components/UsersTab";
 import MatchesTab from "./components/MatchesTab";
 import AchievementsTab from "./components/AchievementsTab";
 import StoryCardsTab from "./components/StoryCardsTab";
+import LeaderboardTab from "./components/LeaderboardTab";
 import type {
   AdminTab,
   AdminStats,
@@ -17,7 +18,9 @@ import type {
   AdminAchievement,
   AchievementSlugCount,
   AdminStoryCard,
+  Challenge,
 } from "@/types/admin";
+import type { LeaderboardEntry as LBEntry } from "@/app/api/leaderboard/route";
 
 const TABS: { id: AdminTab; label: string }[] = [
   { id: "overview", label: "Overview" },
@@ -25,6 +28,7 @@ const TABS: { id: AdminTab; label: string }[] = [
   { id: "matches", label: "Matches" },
   { id: "achievements", label: "Achievements" },
   { id: "story-cards", label: "Story Cards" },
+  { id: "leaderboard", label: "Leaderboard 🏆" },
 ];
 
 interface Props {
@@ -43,6 +47,9 @@ export default function AdminDashboardClient({ githubUsername, avatarUrl }: Prop
   const [achievements, setAchievements] = useState<AdminAchievement[] | null>(null);
   const [slugSummary, setSlugSummary] = useState<AchievementSlugCount[] | null>(null);
   const [cards, setCards] = useState<AdminStoryCard[] | null>(null);
+  const [leaderboard, setLeaderboard] = useState<LBEntry[] | null>(null);
+  const [lbChallenges, setLbChallenges] = useState<Challenge[]>([]);
+  const [lbLoading, setLbLoading] = useState(false);
 
   const fetchStats = useCallback(async () => {
     if (stats) return;
@@ -125,6 +132,19 @@ export default function AdminDashboardClient({ githubUsername, avatarUrl }: Prop
     }
   }, [cards]);
 
+  const fetchLeaderboard = useCallback(async () => {
+    setLbLoading(true);
+    try {
+      const [lbRes, chRes] = await Promise.all([
+        fetch("/api/leaderboard"),
+        fetch("/api/admin/challenges"),
+      ]);
+      if (lbRes.ok) { const j = await lbRes.json(); setLeaderboard(j.entries ?? []); }
+      if (chRes.ok) { const j = await chRes.json(); setLbChallenges(j.challenges ?? []); }
+    } catch { /* non-critical */ }
+    setLbLoading(false);
+  }, []);
+
   // Auto-load overview on mount
   useEffect(() => {
     fetchStats();
@@ -137,6 +157,7 @@ export default function AdminDashboardClient({ githubUsername, avatarUrl }: Prop
     else if (tab === "matches") fetchMatches();
     else if (tab === "achievements") fetchAchievements();
     else if (tab === "story-cards") fetchCards();
+    else if (tab === "leaderboard") fetchLeaderboard();
   }
 
   // ─── Delete handlers (optimistic) ────────────────────────────────────────────
@@ -416,6 +437,14 @@ export default function AdminDashboardClient({ githubUsername, avatarUrl }: Prop
             <StoryCardsTab
               cards={cards}
               loading={loadingTab === "story-cards"}
+            />
+          )}
+          {activeTab === "leaderboard" && (
+            <LeaderboardTab
+              entries={leaderboard ?? []}
+              challenges={lbChallenges}
+              loading={lbLoading}
+              onRefresh={fetchLeaderboard}
             />
           )}
         </div>

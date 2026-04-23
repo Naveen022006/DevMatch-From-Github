@@ -6,6 +6,7 @@ import type {
 } from "@/types";
 import { createServiceClient } from "@/lib/supabase/server";
 import { ACHIEVEMENTS } from "@/lib/achievements/definitions";
+import { addFeedEntry } from "@/lib/feed/helpers";
 
 export { ACHIEVEMENTS };
 
@@ -70,6 +71,14 @@ async function unlockAchievement(
     .single();
 
   if (error || !data) return null;
+
+  // Emit achievement feed entry
+  addFeedEntry({
+    actorId: userId,
+    actionType: "achievement",
+    metadata: { slug, name: achievement.name, icon: achievement.icon },
+  });
+
   return data as UserAchievement;
 }
 

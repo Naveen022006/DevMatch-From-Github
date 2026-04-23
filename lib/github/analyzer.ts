@@ -95,7 +95,8 @@ async function analyzeWithNIM(
 
 export async function analyzeGitHubProfile(
   userId: string,
-  data: GitHubRawData
+  data: GitHubRawData,
+  forceRefresh = false
 ): Promise<UserProfile> {
   const supabase = createServiceClient();
 
@@ -105,7 +106,7 @@ export async function analyzeGitHubProfile(
     .eq("id", userId)
     .single();
 
-  if (cached?.analysis_cached_at) {
+  if (!forceRefresh && cached?.analysis_cached_at) {
     const cachedAt = new Date(cached.analysis_cached_at).getTime();
     if (Date.now() - cachedAt < CACHE_TTL_MS) return cached as UserProfile;
   }

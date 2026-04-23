@@ -3,159 +3,181 @@
 import type { DeveloperMatch } from "@/types";
 import { useState } from "react";
 
+type RequestStatus = "none" | "pending" | "accepted" | "declined";
+
 interface MatchCardProps {
   match: DeveloperMatch;
-  onConnect?: (userId: string) => void | Promise<void>;
+  requestStatus?: RequestStatus;
+  onSendRequest?: (userId: string) => void | Promise<void>;
   onMessage?: (userId: string, username: string, avatarUrl: string) => void;
 }
 
-export function MatchCard({ match, onConnect, onMessage }: MatchCardProps) {
+export function MatchCard({ match, requestStatus = "none", onSendRequest, onMessage }: MatchCardProps) {
   const { profile, compatibility } = match;
   const score = compatibility.total;
-  const [connected, setConnected] = useState(false);
-  const [connecting, setConnecting] = useState(false);
+  const [localStatus, setLocalStatus] = useState<RequestStatus>(requestStatus);
+  const [sending, setSending] = useState(false);
 
   const scoreColor =
     score >= 90 ? "#22d3ee" : score >= 75 ? "#a78bfa" : score >= 60 ? "#34d399" : "#94a3b8";
 
   const bars: { label: string; value: number }[] = [
     { label: "Technical", value: compatibility.technical_synergy },
-    { label: "Learning", value: compatibility.learning_potential },
-    { label: "Collab", value: compatibility.collaboration_style },
-    { label: "Vibe", value: compatibility.personality_fit },
+    { label: "Learning",  value: compatibility.learning_potential },
+    { label: "Collab",    value: compatibility.collaboration_style },
+    { label: "Vibe",      value: compatibility.personality_fit },
   ];
 
-  const handleConnect = async () => {
-    if (!onConnect || connected) return;
-    setConnecting(true);
-    await onConnect(profile.id);
-    setConnected(true);
-    setConnecting(false);
+  const effectiveStatus: RequestStatus =
+    localStatus !== "none" && localStatus !== requestStatus ? localStatus : requestStatus;
+
+  const handleSendRequest = async () => {
+    if (!onSendRequest || effectiveStatus === "pending" || effectiveStatus === "accepted") return;
+    setSending(true);
+    await onSendRequest(profile.id);
+    setLocalStatus("pending");
+    setSending(false);
   };
 
+  const identityColors: Record<string, string> = {
+    builder: "#f59e0b", learner: "#34d399", maintainer: "#60a5fa", explorer: "#f472b6",
+  };
+  const identityColor = identityColors[profile.coding_identity] ?? scoreColor;
+
   return (
-    <div
-      className="rounded-2xl p-5 flex flex-col gap-4 transition-all duration-300 hover:-translate-y-0.5 animate-fade-up"
-      style={{
-        background: "rgba(13,13,26,0.9)",
-        border: `1px solid ${scoreColor}33`,
-        boxShadow: `0 0 28px ${scoreColor}0f, 0 1px 0 rgba(255,255,255,0.05) inset`,
-      }}
+    <div style={{
+      background: "rgba(13,13,26,0.95)",
+      border: `1px solid ${scoreColor}33`,
+      borderRadius: "20px",
+      padding: "22px",
+      display: "flex",
+      flexDirection: "column",
+      gap: "18px",
+      boxShadow: `0 0 32px ${scoreColor}0f, inset 0 1px 0 rgba(255,255,255,0.05)`,
+      transition: "transform 0.15s, box-shadow 0.15s",
+    }}
+      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.transform = "translateY(-2px)"; (e.currentTarget as HTMLDivElement).style.boxShadow = `0 4px 40px ${scoreColor}18, inset 0 1px 0 rgba(255,255,255,0.05)`; }}
+      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.transform = "translateY(0)"; (e.currentTarget as HTMLDivElement).style.boxShadow = `0 0 32px ${scoreColor}0f, inset 0 1px 0 rgba(255,255,255,0.05)`; }}
     >
-      {/* Header */}
-      <div className="flex items-center gap-3">
+      {/* ── Header ── */}
+      <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={profile.avatar_url}
           alt={profile.github_username}
-          className="w-12 h-12 rounded-full shrink-0"
-          style={{ border: `2px solid ${scoreColor}55` }}
+          style={{ width: "52px", height: "52px", borderRadius: "50%", flexShrink: 0, border: `2px solid ${scoreColor}55` }}
         />
-        <div className="flex-1 min-w-0">
-          <p className="font-semibold text-white truncate text-sm">
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: "16px", color: "#f1f5f9", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {profile.display_name ?? profile.github_username}
-          </p>
-          <p className="text-xs text-slate-500 font-mono truncate">
+          </div>
+          <div style={{ fontSize: "12px", color: "#475569", fontFamily: "monospace", marginTop: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             @{profile.github_username}
-          </p>
-          <p className="text-xs text-slate-500 mt-0.5 capitalize">
+          </div>
+          <div style={{ fontSize: "11px", color: "#64748b", marginTop: "3px", textTransform: "capitalize" }}>
             {profile.experience_level} · {profile.coding_identity}
-          </p>
+          </div>
         </div>
         {/* Score badge */}
-        <div
-          className="flex flex-col items-center px-3.5 py-2 rounded-xl shrink-0"
-          style={{
-            background: `${scoreColor}15`,
-            border: `1px solid ${scoreColor}44`,
-          }}
-        >
-          <span className="text-2xl font-bold leading-none" style={{ color: scoreColor }}>
+        <div style={{
+          display: "flex", flexDirection: "column", alignItems: "center",
+          padding: "10px 16px", borderRadius: "14px", flexShrink: 0,
+          background: `${scoreColor}15`, border: `1px solid ${scoreColor}44`,
+        }}>
+          <span style={{ fontSize: "28px", fontWeight: 800, lineHeight: 1, color: scoreColor }}>
             {score}
           </span>
-          <span className="text-[9px] text-slate-500 mt-0.5 tracking-wider uppercase">match</span>
+          <span style={{ fontSize: "9px", color: "#64748b", marginTop: "3px", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+            match
+          </span>
         </div>
       </div>
 
-      {/* Tags */}
-      <div className="flex flex-wrap gap-1.5">
-        <Tag label={profile.coding_identity} color={scoreColor} />
+      {/* ── Tags ── */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+        <span style={{
+          fontSize: "11px", padding: "3px 11px", borderRadius: "20px", fontWeight: 600,
+          textTransform: "capitalize", background: `${identityColor}18`,
+          border: `1px solid ${identityColor}33`, color: identityColor,
+        }}>
+          {profile.coding_identity}
+        </span>
         {profile.languages.slice(0, 4).map((lang) => (
-          <Tag key={lang} label={lang} />
+          <span key={lang} style={{
+            fontSize: "11px", padding: "3px 11px", borderRadius: "20px", fontWeight: 500,
+            background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#94a3b8",
+          }}>
+            {lang}
+          </span>
         ))}
       </div>
 
-      {/* Reason */}
-      <p className="text-sm text-slate-400 leading-relaxed border-l-2 pl-3" style={{ borderColor: `${scoreColor}55` }}>
+      {/* ── Reason ── */}
+      <p style={{
+        margin: 0, fontSize: "13px", color: "#94a3b8", lineHeight: 1.65,
+        borderLeft: `2px solid ${scoreColor}55`, paddingLeft: "14px",
+      }}>
         {compatibility.reason}
       </p>
 
-      {/* Score bars */}
-      <div className="space-y-2.5">
+      {/* ── Score bars ── */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
         {bars.map((bar) => (
-          <div key={bar.label} className="flex items-center gap-3">
-            <span className="text-[11px] text-slate-600 w-14 shrink-0 font-medium">
+          <div key={bar.label} style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <span style={{ fontSize: "11px", color: "#64748b", width: "58px", flexShrink: 0, fontWeight: 500 }}>
               {bar.label}
             </span>
-            <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
-              <div
-                className="h-full rounded-full bar-grow"
-                style={{
-                  "--bar-w": `${bar.value}%`,
-                  background: `linear-gradient(90deg, ${scoreColor}66, ${scoreColor})`,
-                } as React.CSSProperties}
-              />
+            <div style={{ flex: 1, height: "6px", borderRadius: "4px", background: "rgba(255,255,255,0.07)", overflow: "hidden" }}>
+              <div style={{
+                height: "100%", borderRadius: "4px",
+                width: `${bar.value}%`,
+                background: `linear-gradient(90deg, ${scoreColor}66, ${scoreColor})`,
+                transition: "width 0.6s ease-out",
+              }} />
             </div>
-            <span className="text-[11px] text-slate-600 w-7 text-right tabular-nums">
+            <span style={{ fontSize: "11px", color: "#64748b", width: "28px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
               {bar.value}
             </span>
           </div>
         ))}
       </div>
 
-      {/* Connect + Message */}
-      <div style={{ display: "flex", gap: "8px" }}>
-        {onConnect && (
+      {/* ── Actions ── */}
+      <div style={{ display: "flex", gap: "8px", marginTop: "2px" }}>
+        {onSendRequest && (
           <button
-            onClick={handleConnect}
-            disabled={connecting || connected}
-            className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90 active:scale-95 disabled:cursor-default"
-            style={
-              connected
+            onClick={handleSendRequest}
+            disabled={sending || effectiveStatus === "pending" || effectiveStatus === "accepted"}
+            style={{
+              flex: 1, padding: "11px 20px", borderRadius: "12px",
+              fontSize: "14px", fontWeight: 700, cursor: sending || effectiveStatus === "pending" || effectiveStatus === "accepted" ? "default" : "pointer",
+              transition: "all 0.15s",
+              ...(effectiveStatus === "accepted"
                 ? { background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.3)", color: "#34d399" }
-                : {
-                    background: `linear-gradient(135deg, ${scoreColor}22, ${scoreColor}15)`,
-                    border: `1px solid ${scoreColor}44`,
-                    color: scoreColor,
-                  }
-            }
+                : effectiveStatus === "pending"
+                ? { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "#64748b" }
+                : { background: `linear-gradient(135deg, ${scoreColor}25, ${scoreColor}18)`, border: `1px solid ${scoreColor}55`, color: scoreColor,
+                    boxShadow: `0 0 20px ${scoreColor}20` }),
+            }}
           >
-            {connecting ? (
-              <span className="flex items-center justify-center gap-2">
-                <span className="spinner" style={{ width: "14px", height: "14px" }} />
-                Connecting…
+            {sending ? (
+              <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+                <span style={{ width: 13, height: 13, border: `2px solid ${scoreColor}44`, borderTopColor: scoreColor, borderRadius: "50%", display: "inline-block", animation: "spin 0.8s linear infinite" }} />
+                Sending…
               </span>
-            ) : connected ? (
-              "✓ Connected"
-            ) : (
-              "Connect →"
-            )}
+            ) : effectiveStatus === "pending" ? "⏳ Pending…"
+              : effectiveStatus === "accepted" ? "✓ Connected"
+              : "Send Request →"}
           </button>
         )}
-        {onMessage && (
+
+        {onMessage && effectiveStatus === "accepted" && (
           <button
             onClick={() => onMessage(profile.id, profile.github_username, profile.avatar_url)}
             style={{
-              padding: "10px 16px",
-              borderRadius: "12px",
-              border: "1px solid rgba(255,255,255,0.1)",
-              background: "rgba(255,255,255,0.05)",
-              color: "#94a3b8",
-              cursor: "pointer",
-              fontSize: "13px",
-              fontWeight: 600,
-              flexShrink: 0,
-              transition: "all 0.15s",
+              padding: "11px 18px", borderRadius: "12px", fontSize: "13px", fontWeight: 600,
+              cursor: "pointer", transition: "all 0.15s", flexShrink: 0,
+              background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#94a3b8",
             }}
             onMouseOver={e => { e.currentTarget.style.background = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "#e2e8f0"; }}
             onMouseOut={e => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; e.currentTarget.style.color = "#94a3b8"; }}
@@ -165,20 +187,5 @@ export function MatchCard({ match, onConnect, onMessage }: MatchCardProps) {
         )}
       </div>
     </div>
-  );
-}
-
-function Tag({ label, color }: { label: string; color?: string }) {
-  return (
-    <span
-      className="text-[11px] px-2.5 py-0.5 rounded-full capitalize font-medium"
-      style={
-        color
-          ? { background: `${color}18`, border: `1px solid ${color}33`, color }
-          : { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#94a3b8" }
-      }
-    >
-      {label}
-    </span>
   );
 }

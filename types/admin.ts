@@ -74,7 +74,7 @@ export interface AdminStoryCard {
   user: AdminUserMini;
 }
 
-export type AdminTab = "overview" | "users" | "matches" | "achievements" | "story-cards";
+export type AdminTab = "overview" | "users" | "matches" | "achievements" | "story-cards" | "leaderboard";
 
 // ─── Challenges ───────────────────────────────────────────────────────────────
 
@@ -116,4 +116,22 @@ export interface ChallengeSubmission {
   admin_override: boolean | null;
   submitted_at: string;
   user: AdminUserMini;
+}
+
+// ─── Leaderboard ─────────────────────────────────────────────────────────────
+
+export interface LeaderboardEntry {
+  rank: number;
+  user_id: string;
+  github_username: string;
+  avatar_url: string;
+  display_name: string | null;
+  total_completed: number;
+  easy_count: number;
+  medium_count: number;
+  hard_count: number;
+  streak: number;
+  fastest_easy_hrs: number | null;
+  fastest_medium_hrs: number | null;
+  fastest_hard_hrs: number | null;
 }

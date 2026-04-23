@@ -106,6 +106,7 @@ export interface UserProfile {
   analysis_cached_at: string;
   created_at: string;
   updated_at: string;
+  is_public?: boolean;
 }
 
 // ─── Matching ─────────────────────────────────────────────────────────────────
@@ -170,6 +171,30 @@ export interface Message {
   created_at: string;
 }
 
+// ─── Connection Requests ──────────────────────────────────────────────────────
+
+export interface ConnectionRequest {
+  id: string;
+  from_user_id: string;
+  to_user_id: string;
+  status: "pending" | "accepted" | "declined";
+  compatibility_score: number | null;
+  compatibility_data: CompatibilityScore | null;
+  created_at: string;
+}
+
+export interface ConnectionRequestWithProfile extends ConnectionRequest {
+  from_profile: {
+    id: string;
+    github_username: string;
+    avatar_url: string;
+    display_name: string | null;
+    coding_identity: CodingIdentity;
+    experience_level: ExperienceLevel;
+    languages: string[];
+  };
+}
+
 // ─── App State ────────────────────────────────────────────────────────────────
 
 export interface AppUser {
@@ -177,4 +202,26 @@ export interface AppUser {
   email: string;
   github_username: string;
   avatar_url: string;
+}
+
+// ─── Activity Feed ────────────────────────────────────────────────────────────
+
+export type FeedActionType = "joined" | "connected" | "achievement" | "challenge";
+
+export interface FeedProfile {
+  id: string;
+  github_username: string;
+  avatar_url: string;
+  display_name: string | null;
+}
+
+export interface ActivityFeedItem {
+  id: string;
+  actor_id: string;
+  action_type: FeedActionType;
+  target_id: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+  actor: FeedProfile;
+  target: FeedProfile | null;
 }

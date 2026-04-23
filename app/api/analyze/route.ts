@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { collectGitHubData } from "@/lib/github/client";
 import { analyzeGitHubProfile } from "@/lib/github/analyzer";
+import { addFeedEntry } from "@/lib/feed/helpers";
+
+const COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,6 +18,13 @@ export async function POST(request: NextRequest) {
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    // Parse body — may be empty for first-time analysis
+    let force = false;
+    try {
+      const body = await request.json();
+      force = body?.force === true;
+    } catch { /* empty body is fine */ }
 
     // provider_token is only in the initial session — after any token refresh
     // it disappears. Fall back to the gh_token cookie set in the auth callback.
@@ -42,7 +52,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log("[analyze] starting for", githubUsername);
+    // ── Cooldown check (force bypasses) ───────────────────────────────────────
+    if (force) {
+      const service = createServiceClient();
+      const { data: existing } = await service
+        .from("user_profiles")
+        .select("analysis_cached_at")
+        .eq("id", user.id)
+        .single();
+
+      if (existing?.analysis_cached_at) {
+        const cachedAt = new Date(existing.analysis_cached_at).getTime();
+        const remaining = COOLDOWN_MS - (Date.now() - cachedAt);
+        if (remaining > 0) {
+          return NextResponse.json(
+            {
+              error: "Analysis cooldown active. Please wait before refreshing.",
+              cooldownUntil: new Date(cachedAt + COOLDOWN_MS).toISOString(),
+            },
+            { status: 429 }
+          );
+        }
+      }
+    }
+
+    console.log("[analyze] starting for", githubUsername, force ? "(forced)" : "");
 
     // Step 1 — collect GitHub data
     let rawData;
@@ -55,10 +89,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `GitHub fetch failed: ${msg}` }, { status: 500 });
     }
 
+    // Check if this is a first-time profile creation (before analysis)
+    const service = createServiceClient();
+    const { data: existingProfile } = await service
+      .from("user_profiles")
+      .select("id")
+      .eq("id", user.id)
+      .single();
+    const isFirstTime = !existingProfile;
+
     // Step 2 — AI analysis + cache in Supabase
     let profile;
     try {
-      profile = await analyzeGitHubProfile(user.id, rawData);
+      profile = await analyzeGitHubProfile(user.id, rawData, force);
       console.log("[analyze] profile saved:", profile.coding_identity);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -77,6 +120,11 @@ export async function POST(request: NextRequest) {
         );
       }
       return NextResponse.json({ error: `AI analysis failed: ${msg}` }, { status: 500 });
+    }
+
+    // Emit "joined" feed entry on first-time profile creation
+    if (isFirstTime) {
+      addFeedEntry({ actorId: user.id, actionType: "joined" });
     }
 
     return NextResponse.json({ profile });

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { nimChat } from "@/lib/nvidia/client";
 import { checkAndUnlockAchievements } from "@/lib/achievements/system";
+import { addFeedEntry } from "@/lib/feed/helpers";
 import type { UserProfile } from "@/types";
 
 // ── GitHub repo fetcher ───────────────────────────────────────────────────────
@@ -222,6 +223,13 @@ feedback: 3-4 sentences — what the repo does well, what matches/doesn't match 
         completedChallenge: true,
       });
     } catch { /* non-critical */ }
+
+    // Emit challenge feed entry
+    addFeedEntry({
+      actorId: user.id,
+      actionType: "challenge",
+      metadata: { title: challenge.title, difficulty: challenge.difficulty },
+    });
   }
 
   return NextResponse.json({
