@@ -10,6 +10,7 @@ import MatchesTab from "./components/MatchesTab";
 import AchievementsTab from "./components/AchievementsTab";
 import StoryCardsTab from "./components/StoryCardsTab";
 import LeaderboardTab from "./components/LeaderboardTab";
+import FeedPostsTab from "./components/FeedPostsTab";
 import type {
   AdminTab,
   AdminStats,
@@ -29,6 +30,7 @@ const TABS: { id: AdminTab; label: string }[] = [
   { id: "achievements", label: "Achievements" },
   { id: "story-cards", label: "Story Cards" },
   { id: "leaderboard", label: "Leaderboard 🏆" },
+  { id: "feed-posts", label: "Feed Posts" },
 ];
 
 interface Props {
@@ -446,6 +448,9 @@ export default function AdminDashboardClient({ githubUsername, avatarUrl }: Prop
               loading={lbLoading}
               onRefresh={fetchLeaderboard}
             />
+          )}
+          {activeTab === "feed-posts" && (
+            <FeedPostsTab onError={setError} />
           )}
         </div>
       </div>

@@ -1249,7 +1249,62 @@ function FeedCard({ item }: { item: import("@/types").ActivityFeedItem }) {
     connected: "#a78bfa",
     achievement: "#fbbf24",
     challenge: "#22d3ee",
+    admin_post: "#a78bfa",
   };
+
+  // ── Admin broadcast post ───────────────────────────────────────────────────
+  if (item.action_type === "admin_post") {
+    const title = item.metadata?.title as string | undefined;
+    const content = item.metadata?.content as string | undefined;
+    const timeAgo = (() => {
+      const diff = Date.now() - new Date(item.created_at).getTime();
+      const m = Math.floor(diff / 60000);
+      if (m < 60) return `${m}m ago`;
+      const h = Math.floor(m / 60);
+      if (h < 24) return `${h}h ago`;
+      return `${Math.floor(h / 24)}d ago`;
+    })();
+
+    return (
+      <div
+        style={{
+          background: "rgba(13,13,26,0.95)",
+          border: "1px solid rgba(167,139,250,0.25)",
+          borderRadius: "14px",
+          padding: "16px 18px",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: "0.07em",
+              textTransform: "uppercase",
+              color: "#a78bfa",
+              background: "rgba(167,139,250,0.12)",
+              border: "1px solid rgba(167,139,250,0.25)",
+              padding: "2px 8px",
+              borderRadius: 20,
+            }}
+          >
+            DevMatch
+          </span>
+          <span style={{ fontSize: 11, color: "#475569" }}>{timeAgo}</span>
+        </div>
+        {title && (
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#f1f5f9", marginBottom: 6 }}>
+            {title}
+          </div>
+        )}
+        {content && (
+          <div style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.65 }}>
+            {content}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   const color = actionColors[item.action_type] ?? "#94a3b8";
   const timeAgo = (() => {

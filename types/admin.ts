@@ -75,7 +75,22 @@ export interface AdminStoryCard {
   user: AdminUserMini;
 }
 
-export type AdminTab = "overview" | "users" | "matches" | "achievements" | "story-cards" | "leaderboard";
+export type AdminTab = "overview" | "users" | "matches" | "achievements" | "story-cards" | "leaderboard" | "feed-posts";
+
+// ─── Admin Feed Posts ─────────────────────────────────────────────────────────
+
+export interface AdminFeedPost {
+  id: string;
+  actor_id: string;
+  action_type: "admin_post";
+  metadata: {
+    title: string;
+    content: string;
+    topic: string | null;
+    admin_username: string;
+  };
+  created_at: string;
+}
 
 // ─── Challenges ───────────────────────────────────────────────────────────────
 

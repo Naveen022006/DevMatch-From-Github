@@ -229,7 +229,7 @@ export interface ProjectIdea {
 }
 
 
-export type FeedActionType = "joined" | "connected" | "achievement" | "challenge";
+export type FeedActionType = "joined" | "connected" | "achievement" | "challenge" | "admin_post";
 
 export interface FeedProfile {
   id: string;
