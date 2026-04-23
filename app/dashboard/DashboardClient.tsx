@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { UserProfile, DeveloperMatch, StoryCard, UserAchievement } from "@/types";
 import type { ChallengeWithSubmission } from "@/types/admin";
 import { MatchCard } from "@/components/MatchCard";
 import { StoryCardComponent } from "@/components/StoryCard";
 import { AchievementCard, AchievementToast } from "@/components/AchievementCard";
+import { ChatPanel } from "@/components/ChatPanel";
 import { createClient } from "@/lib/supabase/client";
 
 interface Props {
@@ -46,6 +47,7 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
   const [profile, setProfile] = useState<UserProfile | null>(initialProfile);
   const [matches, setMatches] = useState<DeveloperMatch[]>([]);
   const [storyCard, setStoryCard] = useState<StoryCard | null>(null);
+  const [storyRegenerating, setStoryRegenerating] = useState(false);
   const [achievements, setAchievements] = useState<UserAchievement[]>([]);
   const [newAchievements, setNewAchievements] = useState<UserAchievement[]>([]);
   const [challenges, setChallenges] = useState<ChallengeWithSubmission[]>([]);
@@ -55,11 +57,37 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
   const [loadingSection, setLoadingSection] = useState<Tab | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // ── Messaging ──────────────────────────────────────────────────────────────
+  const [chatUser, setChatUser] = useState<{ id: string; username: string; avatarUrl: string } | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+
   const signOut = async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
     window.location.href = "/";
   };
+
+  // Fetch unread count on mount + subscribe to new incoming messages
+  const refreshUnread = async () => {
+    const res = await fetch("/api/messages/unread");
+    if (res.ok) { const j = await res.json(); setUnreadCount(j.count ?? 0); }
+  };
+
+  useEffect(() => {
+    refreshUnread();
+    const supabase = createClient();
+    const channel = supabase
+      .channel("unread-badge")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `receiver_id=eq.${userId}` }, () => {
+        setUnreadCount((c) => c + 1);
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages", filter: `receiver_id=eq.${userId}` }, () => {
+        refreshUnread();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
 
   const withLoad = async (section: Tab, fn: () => Promise<void>) => {
     setLoading(true); setLoadingSection(section); setError(null);
@@ -88,6 +116,21 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
     if (!res.ok) throw new Error(json.error);
     setStoryCard(json.card); setTab("story");
   });
+
+  const regenerateStoryCard = async () => {
+    setStoryRegenerating(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/story-card", { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      setStoryCard(json.card);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Regeneration failed");
+    } finally {
+      setStoryRegenerating(false);
+    }
+  };
 
   const loadAchievements = () => withLoad("achievements", async () => {
     const res = await fetch("/api/achievements");
@@ -193,14 +236,28 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
             <button key={t.id} onClick={() => {
               setTab(t.id);
               if (t.id === "challenges" && challenges.length === 0 && !loading) loadChallenges();
+              if (t.id === "story" && !storyCard && !loading) loadStoryCard();
             }} style={{
               flex: 1, padding: "9px 8px", borderRadius: "10px", fontSize: "13px",
               fontWeight: 600, cursor: "pointer", transition: "all 0.15s", border: "none",
+              position: "relative",
               ...(tab === t.id
                 ? { background: "rgba(124,58,237,0.2)", color: "#c4b5fd", boxShadow: "0 0 0 1px rgba(124,58,237,0.3)" }
                 : { background: "transparent", color: "#475569" }),
             }}>
               {t.label}
+              {t.id === "matches" && unreadCount > 0 && (
+                <span style={{
+                  position: "absolute", top: 4, right: 4,
+                  minWidth: 16, height: 16, borderRadius: 8,
+                  background: "#ef4444",
+                  color: "#fff", fontSize: 9, fontWeight: 700,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  padding: "0 4px",
+                }}>
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -250,7 +307,7 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
             ) : (
               <>
                 <p style={{ fontSize: "12px", color: "#475569", marginBottom: "4px" }}>Your top {matches.length} compatible developers</p>
-                {matches.map(m => <MatchCard key={m.profile.id} match={m} onConnect={handleConnect} />)}
+                {matches.map(m => <MatchCard key={m.profile.id} match={m} onConnect={handleConnect} onMessage={(id, username, avatarUrl) => setChatUser({ id, username, avatarUrl })} />)}
               </>
             )}
           </div>
@@ -258,13 +315,19 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
 
         {/* ── Story Card Tab ── */}
         {tab === "story" && (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", paddingTop: "8px" }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", paddingTop: "4px", width: "100%" }}>
             {isLoading("story") ? <StorySkeleton /> : !storyCard ? (
-              <EmptyState icon="⟡" title="No story card yet" desc={profile ? "Generate your AI-created developer tarot card." : "Analyze your profile first."}>
+              <EmptyState icon="⟡" title="No story card yet" desc={profile ? "Your AI developer card is loading…" : "Analyze your profile first."}>
                 {profile ? <PrimaryBtn onClick={loadStoryCard} loading={loading} label="Generate Story Card" /> : <SecondaryBtn onClick={() => setTab("profile")} loading={false} label="Go to Profile" />}
               </EmptyState>
             ) : (
-              <StoryCardComponent card={storyCard} username={githubUsername} avatarUrl={avatarUrl} />
+              <StoryCardComponent
+                card={storyCard}
+                username={githubUsername}
+                avatarUrl={avatarUrl}
+                onRegenerate={regenerateStoryCard}
+                regenerating={storyRegenerating}
+              />
             )}
           </div>
         )}
@@ -412,6 +475,16 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
       </main>
 
       <AchievementToast achievements={newAchievements} onDismiss={() => setNewAchievements([])} />
+
+      {/* Chat panel */}
+      {chatUser && (
+        <ChatPanel
+          currentUserId={userId}
+          otherUser={chatUser}
+          onClose={() => setChatUser(null)}
+          onMessageRead={refreshUnread}
+        />
+      )}
     </div>
   );
 }

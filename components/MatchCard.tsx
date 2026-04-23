@@ -6,9 +6,10 @@ import { useState } from "react";
 interface MatchCardProps {
   match: DeveloperMatch;
   onConnect?: (userId: string) => void | Promise<void>;
+  onMessage?: (userId: string, username: string, avatarUrl: string) => void;
 }
 
-export function MatchCard({ match, onConnect }: MatchCardProps) {
+export function MatchCard({ match, onConnect, onMessage }: MatchCardProps) {
   const { profile, compatibility } = match;
   const score = compatibility.total;
   const [connected, setConnected] = useState(false);
@@ -112,34 +113,57 @@ export function MatchCard({ match, onConnect }: MatchCardProps) {
         ))}
       </div>
 
-      {/* Connect */}
-      {onConnect && (
-        <button
-          onClick={handleConnect}
-          disabled={connecting || connected}
-          className="w-full py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90 active:scale-95 disabled:cursor-default"
-          style={
-            connected
-              ? { background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.3)", color: "#34d399" }
-              : {
-                  background: `linear-gradient(135deg, ${scoreColor}22, ${scoreColor}15)`,
-                  border: `1px solid ${scoreColor}44`,
-                  color: scoreColor,
-                }
-          }
-        >
-          {connecting ? (
-            <span className="flex items-center justify-center gap-2">
-              <span className="spinner" style={{ width: "14px", height: "14px" }} />
-              Connecting…
-            </span>
-          ) : connected ? (
-            "✓ Connected"
-          ) : (
-            "Connect →"
-          )}
-        </button>
-      )}
+      {/* Connect + Message */}
+      <div style={{ display: "flex", gap: "8px" }}>
+        {onConnect && (
+          <button
+            onClick={handleConnect}
+            disabled={connecting || connected}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all hover:opacity-90 active:scale-95 disabled:cursor-default"
+            style={
+              connected
+                ? { background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.3)", color: "#34d399" }
+                : {
+                    background: `linear-gradient(135deg, ${scoreColor}22, ${scoreColor}15)`,
+                    border: `1px solid ${scoreColor}44`,
+                    color: scoreColor,
+                  }
+            }
+          >
+            {connecting ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="spinner" style={{ width: "14px", height: "14px" }} />
+                Connecting…
+              </span>
+            ) : connected ? (
+              "✓ Connected"
+            ) : (
+              "Connect →"
+            )}
+          </button>
+        )}
+        {onMessage && (
+          <button
+            onClick={() => onMessage(profile.id, profile.github_username, profile.avatar_url)}
+            style={{
+              padding: "10px 16px",
+              borderRadius: "12px",
+              border: "1px solid rgba(255,255,255,0.1)",
+              background: "rgba(255,255,255,0.05)",
+              color: "#94a3b8",
+              cursor: "pointer",
+              fontSize: "13px",
+              fontWeight: 600,
+              flexShrink: 0,
+              transition: "all 0.15s",
+            }}
+            onMouseOver={e => { e.currentTarget.style.background = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "#e2e8f0"; }}
+            onMouseOut={e => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; e.currentTarget.style.color = "#94a3b8"; }}
+          >
+            💬 Message
+          </button>
+        )}
+      </div>
     </div>
   );
 }
