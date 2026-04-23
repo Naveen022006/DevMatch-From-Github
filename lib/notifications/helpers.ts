@@ -15,6 +15,17 @@ export async function createNotification(params: {
 }) {
   try {
     const service = createServiceClient();
+
+    // Respect per-type notification preferences
+    const { data: profile } = await service
+      .from("user_profiles")
+      .select("notification_preferences")
+      .eq("id", params.userId)
+      .single();
+
+    const prefs = profile?.notification_preferences as Record<string, boolean> | null;
+    if (prefs && prefs[params.type] === false) return; // user disabled this type
+
     await service.from("notifications").insert({
       user_id: params.userId,
       type: params.type,

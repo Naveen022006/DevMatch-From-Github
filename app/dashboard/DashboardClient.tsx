@@ -442,6 +442,21 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <NotificationsPanel userId={userId} onNavigate={handleNotificationNavigate} />
+          <a
+            href="/dashboard/settings"
+            title="Settings"
+            style={{
+              width: "28px", height: "28px", borderRadius: "8px", display: "flex",
+              alignItems: "center", justifyContent: "center",
+              color: "#475569", textDecoration: "none", fontSize: "16px",
+              background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)",
+              transition: "color 0.15s, background 0.15s",
+            }}
+            onMouseOver={e => { (e.currentTarget as HTMLAnchorElement).style.color = "#94a3b8"; (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.1)"; }}
+            onMouseOut={e => { (e.currentTarget as HTMLAnchorElement).style.color = "#475569"; (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.05)"; }}
+          >
+            ⚙
+          </a>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={avatarUrl} alt={githubUsername} style={{ width: "28px", height: "28px", borderRadius: "50%", border: "2px solid rgba(124,58,237,0.5)" }} />
           <span style={{ fontSize: "13px", color: "#64748b", fontFamily: "monospace" }}>@{githubUsername}</span>

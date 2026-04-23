@@ -107,6 +107,8 @@ export interface UserProfile {
   created_at: string;
   updated_at: string;
   is_public?: boolean;
+  hide_from_feed?: boolean;
+  notification_preferences?: Record<string, boolean>;
 }
 
 // ─── Matching ─────────────────────────────────────────────────────────────────
