@@ -2,6 +2,7 @@
 
 import type { DeveloperMatch } from "@/types";
 import { useState } from "react";
+import { ProjectIdeasPanel } from "@/components/ProjectIdeasPanel";
 
 type RequestStatus = "none" | "pending" | "accepted" | "declined";
 
@@ -17,6 +18,7 @@ export function MatchCard({ match, requestStatus = "none", onSendRequest, onMess
   const score = compatibility.total;
   const [localStatus, setLocalStatus] = useState<RequestStatus>(requestStatus);
   const [sending, setSending] = useState(false);
+  const [showIdeas, setShowIdeas] = useState(false);
 
   const scoreColor =
     score >= 90 ? "#22d3ee" : score >= 75 ? "#a78bfa" : score >= 60 ? "#34d399" : "#94a3b8";
@@ -143,13 +145,13 @@ export function MatchCard({ match, requestStatus = "none", onSendRequest, onMess
       </div>
 
       {/* ── Actions ── */}
-      <div style={{ display: "flex", gap: "8px", marginTop: "2px" }}>
+      <div style={{ display: "flex", gap: "8px", marginTop: "2px", flexWrap: "wrap" }}>
         {onSendRequest && (
           <button
             onClick={handleSendRequest}
             disabled={sending || effectiveStatus === "pending" || effectiveStatus === "accepted"}
             style={{
-              flex: 1, padding: "11px 20px", borderRadius: "12px",
+              flex: 1, minWidth: "140px", padding: "11px 20px", borderRadius: "12px",
               fontSize: "14px", fontWeight: 700, cursor: sending || effectiveStatus === "pending" || effectiveStatus === "accepted" ? "default" : "pointer",
               transition: "all 0.15s",
               ...(effectiveStatus === "accepted"
@@ -185,7 +187,33 @@ export function MatchCard({ match, requestStatus = "none", onSendRequest, onMess
             💬 Message
           </button>
         )}
+
+        {/* Project Ideas toggle */}
+        <button
+          onClick={() => setShowIdeas((v) => !v)}
+          style={{
+            padding: "11px 16px", borderRadius: "12px", fontSize: "13px", fontWeight: 600,
+            cursor: "pointer", transition: "all 0.15s", flexShrink: 0, border: "none",
+            ...(showIdeas
+              ? { background: `${scoreColor}22`, color: scoreColor, boxShadow: `0 0 14px ${scoreColor}18` }
+              : { background: "rgba(255,255,255,0.05)", color: "#64748b" }),
+          }}
+          onMouseOver={e => { if (!showIdeas) { e.currentTarget.style.background = "rgba(255,255,255,0.09)"; e.currentTarget.style.color = "#94a3b8"; } }}
+          onMouseOut={e => { if (!showIdeas) { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; e.currentTarget.style.color = "#64748b"; } }}
+          title="See AI-generated project ideas"
+        >
+          💡 Ideas
+        </button>
       </div>
+
+      {/* ── Project Ideas Panel ── */}
+      {showIdeas && (
+        <ProjectIdeasPanel
+          otherUserId={profile.id}
+          otherUsername={profile.github_username}
+          accentColor={scoreColor}
+        />
+      )}
     </div>
   );
 }

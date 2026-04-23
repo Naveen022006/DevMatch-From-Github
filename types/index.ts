@@ -204,7 +204,17 @@ export interface AppUser {
   avatar_url: string;
 }
 
-// ─── Activity Feed ────────────────────────────────────────────────────────────
+// ─── Project Ideas ────────────────────────────────────────────────────────────
+
+export type ProjectDifficulty = "beginner" | "intermediate" | "advanced";
+
+export interface ProjectIdea {
+  title: string;
+  description: string;
+  techStack: string[];
+  difficulty: ProjectDifficulty;
+}
+
 
 export type FeedActionType = "joined" | "connected" | "achievement" | "challenge";
 
