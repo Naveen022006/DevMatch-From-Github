@@ -6,7 +6,9 @@ import type { ChallengeWithSubmission } from "@/types/admin";
 import type { LeaderboardEntry } from "@/app/api/leaderboard/route";
 import { MatchCard } from "@/components/MatchCard";
 import { StoryCardComponent } from "@/components/StoryCard";
-import { AchievementCard, AchievementToast } from "@/components/AchievementCard";
+import { AchievementCard, AchievementToast, LockedAchievementCard } from "@/components/AchievementCard";
+import type { AchievementSlug } from "@/types";
+import { ACHIEVEMENTS } from "@/lib/achievements/definitions";
 import { ChatPanel } from "@/components/ChatPanel";
 import { NotificationsPanel } from "@/components/NotificationsPanel";
 import { SkillBadges } from "@/components/SkillBadges";
@@ -115,7 +117,7 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
       setTab(tabName);
       if (tabName === "requests") loadRequests();
       if (tabName === "matches" && matches.length === 0) loadMatches();
-      if (tabName === "achievements" && achievements.length === 0) loadAchievements();
+      if (tabName === "achievements") loadAchievements();
       if (tabName === "challenges" && challenges.length === 0) loadChallenges();
     } else if (link.startsWith("chat:")) {
       const senderId = link.slice(5);
@@ -485,6 +487,7 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
               if (t.id === "story" && !storyCard && !loading) loadStoryCard();
               if (t.id === "requests") loadRequests();
               if (t.id === "feed" && feedItems.length === 0 && !feedLoading) loadFeed(1);
+              if (t.id === "achievements" && !loading) loadAchievements();
             }} style={{
               flex: 1, padding: "9px 8px", borderRadius: "10px", fontSize: "13px",
               fontWeight: 600, cursor: "pointer", transition: "all 0.15s", border: "none",
@@ -783,12 +786,64 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
         {/* ── Achievements Tab ── */}
         {tab === "achievements" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-            {isLoading("achievements") ? <><AchievementSkeleton /><AchievementSkeleton /><AchievementSkeleton /></> : achievements.length === 0 ? (
-              <EmptyState icon="✦" title="No achievements yet" desc="Connect with developers and solve challenges to earn badges.">
-                <SecondaryBtn onClick={loadAchievements} loading={loading} label="Refresh" />
-              </EmptyState>
+            {isLoading("achievements") ? (
+              <><AchievementSkeleton /><AchievementSkeleton /><AchievementSkeleton /></>
             ) : (
-              achievements.map((a, i) => <AchievementCard key={a.id} achievement={a} index={i} />)
+              (() => {
+                const allSlugs = Object.keys(ACHIEVEMENTS) as AchievementSlug[];
+                const unlockedSlugs = new Set(achievements.map((a) => a.achievement_slug));
+                const lockedSlugs = allSlugs.filter((s) => !unlockedSlugs.has(s));
+                const total = allSlugs.length;
+                const unlocked = achievements.length;
+
+                return (
+                  <>
+                    {/* Header */}
+                    <div style={{ marginBottom: 4 }}>
+                      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
+                        <div>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: "#f1f5f9" }}>Achievements</div>
+                          <div style={{ fontSize: 12, color: "#475569", marginTop: 2 }}>
+                            {unlocked} of {total} unlocked
+                          </div>
+                        </div>
+                        <div style={{ fontSize: 22, fontWeight: 800, color: "#a78bfa" }}>
+                          {unlocked}<span style={{ fontSize: 14, color: "#475569", fontWeight: 500 }}>/{total}</span>
+                        </div>
+                      </div>
+                      {/* Progress bar */}
+                      <div style={{ height: 5, borderRadius: 99, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
+                        <div style={{
+                          height: "100%",
+                          borderRadius: 99,
+                          width: `${(unlocked / total) * 100}%`,
+                          background: "linear-gradient(90deg, #7c3aed, #a78bfa)",
+                          transition: "width 0.6s ease",
+                        }} />
+                      </div>
+                    </div>
+
+                    {/* Unlocked */}
+                    {achievements.length === 0 ? (
+                      <EmptyState icon="✦" title="No achievements yet" desc="Connect with developers and solve challenges to earn badges." />
+                    ) : (
+                      achievements.map((a, i) => <AchievementCard key={a.id} achievement={a} index={i} />)
+                    )}
+
+                    {/* Locked */}
+                    {lockedSlugs.length > 0 && (
+                      <>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: "#334155", letterSpacing: "0.05em", textTransform: "uppercase", marginTop: 8, marginBottom: 2 }}>
+                          Locked
+                        </div>
+                        {lockedSlugs.map((slug) => (
+                          <LockedAchievementCard key={slug} slug={slug} />
+                        ))}
+                      </>
+                    )}
+                  </>
+                );
+              })()
             )}
           </div>
         )}
