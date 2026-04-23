@@ -110,6 +110,14 @@ export interface UserProfile {
   hide_from_feed?: boolean;
   notification_preferences?: Record<string, boolean>;
   onboarding_completed?: boolean;
+
+  // Personal info
+  age?: number | null;
+  place?: string | null;
+  role?: string | null;
+  gender?: string | null;
+  contact_email?: string | null;
+  phone?: string | null;
 }
 
 // ─── Matching ─────────────────────────────────────────────────────────────────

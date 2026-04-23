@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import type { UserProfile } from "@/types";
 
 const NOTIFICATION_TYPES = [
@@ -24,6 +24,17 @@ export default function SettingsClient({ profile, avatarUrl, githubUsername }: P
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
+
+  // ── Personal Info section ─────────────────────────────────────────────────────
+  const [age, setAge] = useState(profile.age != null ? String(profile.age) : "");
+  const [place, setPlace] = useState(profile.place ?? "");
+  const [role, setRole] = useState(profile.role ?? "");
+  const [gender, setGender] = useState(profile.gender ?? "");
+  const [contactEmail, setContactEmail] = useState(profile.contact_email ?? "");
+  const [phone, setPhone] = useState(profile.phone ?? "");
+  const [personalSaving, setPersonalSaving] = useState(false);
+  const [personalSaved, setPersonalSaved] = useState(false);
+  const [personalError, setPersonalError] = useState<string | null>(null);
 
   // ── Privacy section ───────────────────────────────────────────────────────────
   const [isPublic, setIsPublic] = useState(profile.is_public !== false);
@@ -50,8 +61,7 @@ export default function SettingsClient({ profile, avatarUrl, githubUsername }: P
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
 
-  const saveProfile = async () => {
-    setProfileSaving(true);
+  const saveProfile = async () => {    setProfileSaving(true);
     setProfileError(null);
     setProfileSaved(false);
     try {
@@ -68,6 +78,33 @@ export default function SettingsClient({ profile, avatarUrl, githubUsername }: P
       setProfileError(e instanceof Error ? e.message : "Save failed");
     }
     setProfileSaving(false);
+  };
+
+  const savePersonalInfo = async () => {
+    setPersonalSaving(true);
+    setPersonalError(null);
+    setPersonalSaved(false);
+    try {
+      const res = await fetch("/api/settings/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          age: age.trim() ? Number(age) : null,
+          place: place.trim() || null,
+          role: role.trim() || null,
+          gender: gender || null,
+          contact_email: contactEmail.trim() || null,
+          phone: phone.trim() || null,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      setPersonalSaved(true);
+      setTimeout(() => setPersonalSaved(false), 3000);
+    } catch (e) {
+      setPersonalError(e instanceof Error ? e.message : "Save failed");
+    }
+    setPersonalSaving(false);
   };
 
   const savePrivacy = async () => {
@@ -228,6 +265,112 @@ export default function SettingsClient({ profile, avatarUrl, githubUsername }: P
 
           {profileError && <ErrorMsg msg={profileError} onDismiss={() => setProfileError(null)} />}
           <SaveBtn onClick={saveProfile} saving={profileSaving} saved={profileSaved} />
+        </div>
+
+        {/* ── Personal Info Section ── */}
+        <div style={card}>
+          <div style={sectionTitle}>Personal Info</div>
+          <div style={sectionDesc}>Basic details about you — all fields are optional</div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginBottom: "14px" }}>
+            {/* Age */}
+            <div>
+              <label style={label}>Age</label>
+              <input
+                type="number"
+                value={age}
+                onChange={e => setAge(e.target.value)}
+                placeholder="e.g. 24"
+                min={13}
+                max={120}
+                style={inputStyle}
+              />
+            </div>
+
+            {/* Gender */}
+            <div>
+              <label style={label}>Gender</label>
+              <SelectField
+                value={gender}
+                onChange={setGender}
+                placeholder="Select…"
+                options={[
+                  { value: "male", label: "Male" },
+                  { value: "female", label: "Female" },
+                  { value: "non-binary", label: "Non-binary" },
+                  { value: "prefer-not-to-say", label: "Prefer not to say" },
+                ]}
+                inputStyle={inputStyle}
+              />
+            </div>
+          </div>
+
+          {/* Place */}
+          <div style={{ marginBottom: "14px" }}>
+            <label style={label}>Location</label>
+            <input
+              type="text"
+              value={place}
+              onChange={e => setPlace(e.target.value)}
+              placeholder="e.g. Chennai, India"
+              maxLength={100}
+              style={inputStyle}
+            />
+          </div>
+
+          {/* Role */}
+          <div style={{ marginBottom: "14px" }}>
+            <label style={label}>Role / Title</label>
+            <SelectField
+              value={role}
+              onChange={setRole}
+              placeholder="Select your role…"
+              options={[
+                { value: "Frontend Developer", label: "Frontend Developer" },
+                { value: "Backend Developer", label: "Backend Developer" },
+                { value: "Full-Stack Developer", label: "Full-Stack Developer" },
+                { value: "Mobile Developer", label: "Mobile Developer" },
+                { value: "Data Scientist", label: "Data Scientist" },
+                { value: "ML / AI Engineer", label: "ML / AI Engineer" },
+                { value: "DevOps Engineer", label: "DevOps Engineer" },
+                { value: "Security Engineer", label: "Security Engineer" },
+                { value: "Student", label: "Student" },
+                { value: "Other", label: "Other" },
+              ]}
+              inputStyle={inputStyle}
+            />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginBottom: "20px" }}>
+            {/* Email */}
+            <div>
+              <label style={label}>Contact Email</label>
+              <input
+                type="email"
+                value={contactEmail}
+                onChange={e => setContactEmail(e.target.value)}
+                placeholder="you@example.com"
+                maxLength={200}
+                style={inputStyle}
+              />
+            </div>
+
+            {/* Phone */}
+            <div>
+              <label style={label}>Phone Number</label>
+              <input
+                type="tel"
+                value={phone}
+                onChange={e => setPhone(e.target.value)}
+                placeholder="+91 9876543210"
+                maxLength={30}
+                style={inputStyle}
+              />
+            </div>
+          </div>
+
+          {personalError && <ErrorMsg msg={personalError} onDismiss={() => setPersonalError(null)} />}
+          <SaveBtn onClick={savePersonalInfo} saving={personalSaving} saved={personalSaved} />
         </div>
 
         {/* ── Privacy Section ── */}
@@ -489,6 +632,80 @@ function ErrorMsg({ msg, onDismiss }: { msg: string; onDismiss: () => void }) {
     }}>
       <span style={{ flex: 1 }}>{msg}</span>
       <button onClick={onDismiss} style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", fontSize: "16px", lineHeight: 1 }}>×</button>
+    </div>
+  );
+}
+
+function SelectField({ value, onChange, options, placeholder, inputStyle }: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  placeholder?: string;
+  inputStyle: React.CSSProperties;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const selected = options.find(o => o.value === value);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        style={{
+          ...inputStyle,
+          cursor: "pointer",
+          textAlign: "left",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          color: selected ? "#e2e8f0" : "#475569",
+        }}
+      >
+        <span>{selected ? selected.label : (placeholder ?? "Select…")}</span>
+        <span style={{
+          fontSize: "10px", color: "#475569",
+          transform: open ? "rotate(180deg)" : "none",
+          transition: "transform 0.2s", flexShrink: 0,
+        }}>▼</span>
+      </button>
+      {open && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0,
+          background: "#0d0d1a", border: "1px solid rgba(255,255,255,0.12)",
+          borderRadius: "10px", zIndex: 50, overflow: "hidden",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
+        }}>
+          {options.map(opt => (
+            <button
+              key={opt.value}
+              type="button"
+              onMouseDown={() => { onChange(opt.value); setOpen(false); }}
+              style={{
+                width: "100%", padding: "10px 14px",
+                background: opt.value === value ? "rgba(124,58,237,0.15)" : "transparent",
+                border: "none",
+                color: opt.value === value ? "#c4b5fd" : "#94a3b8",
+                fontSize: "14px", textAlign: "left", cursor: "pointer",
+                display: "block", fontFamily: "inherit",
+              }}
+              onMouseOver={e => { if (opt.value !== value) e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
+              onMouseOut={e => { e.currentTarget.style.background = opt.value === value ? "rgba(124,58,237,0.15)" : "transparent"; }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

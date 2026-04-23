@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import type { UserProfile, DeveloperMatch, StoryCard, UserAchievement, ConnectionRequestWithProfile, ActivityFeedItem } from "@/types";
 import type { ChallengeWithSubmission } from "@/types/admin";
 import type { LeaderboardEntry } from "@/app/api/leaderboard/route";
@@ -129,10 +129,10 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
   };
 
   // Fetch unread count on mount + subscribe to new incoming messages
-  const refreshUnread = async () => {
+  const refreshUnread = useCallback(async () => {
     const res = await fetch("/api/messages/unread");
     if (res.ok) { const j = await res.json(); setUnreadCount(j.count ?? 0); }
-  };
+  }, []);
 
   const loadConnectionStatuses = async () => {
     const res = await fetch("/api/connections");
@@ -285,6 +285,14 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
     if (!res.ok) throw new Error(json.error);
     setMatches(json.matches); setTab("matches");
     loadConnectionStatuses(); // load request statuses alongside matches
+  });
+
+  const loadCachedMatches = () => withLoad("matches", async () => {
+    const res = await fetch("/api/match/cached");
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error);
+    setMatches(json.matches ?? []);
+    loadConnectionStatuses();
   });
 
   const loadStoryCard = () => withLoad("story", async () => {
@@ -488,6 +496,7 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
               if (t.id === "requests") loadRequests();
               if (t.id === "feed" && feedItems.length === 0 && !feedLoading) loadFeed(1);
               if (t.id === "achievements" && !loading) loadAchievements();
+              if (t.id === "matches" && !loading) loadCachedMatches();
             }} style={{
               flex: 1, padding: "9px 8px", borderRadius: "10px", fontSize: "13px",
               fontWeight: 600, cursor: "pointer", transition: "all 0.15s", border: "none",
@@ -585,12 +594,38 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
         {/* ── Matches Tab ── */}
         {tab === "matches" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-            {isLoading("matches") ? <><MatchSkeleton /><MatchSkeleton /><MatchSkeleton /></> : matches.length === 0 ? (
-              <EmptyState icon="⬡" title="No matches yet" desc={profile ? "Run the matchmaker to meet your tribe." : "Analyze your profile first."}>
-                {profile ? <PrimaryBtn onClick={loadMatches} loading={loading} label="Find Matches" /> : <SecondaryBtn onClick={() => setTab("profile")} loading={false} label="Go to Profile" />}
+            {isLoading("matches") ? (
+              <><MatchSkeleton /><MatchSkeleton /><MatchSkeleton /></>
+            ) : matches.length === 0 ? (
+              <EmptyState icon="⬡" title="No matches yet" desc={profile ? "Run the AI matchmaker to find your top compatible developers." : "Analyze your GitHub profile first to find matches."}>
+                {profile
+                  ? <PrimaryBtn onClick={loadMatches} loading={loading} label="Find My Matches" />
+                  : <SecondaryBtn onClick={() => setTab("profile")} loading={false} label="Go to Profile" />}
               </EmptyState>
             ) : (
               <>
+                {/* Header row */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 2 }}>
+                  <div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: "#f1f5f9" }}>Your Matches</div>
+                    <div style={{ fontSize: 12, color: "#475569", marginTop: 2 }}>
+                      {matches.length} compatible developer{matches.length !== 1 ? "s" : ""} found
+                    </div>
+                  </div>
+                  <button
+                    onClick={loadMatches}
+                    disabled={loading}
+                    style={{
+                      padding: "7px 14px", borderRadius: 10, fontSize: 12, fontWeight: 600,
+                      cursor: loading ? "not-allowed" : "pointer", border: "1px solid rgba(167,139,250,0.3)",
+                      background: "rgba(167,139,250,0.08)", color: loading ? "#475569" : "#a78bfa",
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    {loading ? "Refreshing…" : "Refresh Matches"}
+                  </button>
+                </div>
+
                 {/* Filter chips */}
                 {availableLangs.length > 0 && (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "7px", paddingBottom: "2px" }}>
@@ -617,11 +652,11 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
                   </div>
                 )}
 
-                <p style={{ fontSize: "12px", color: "#475569", marginBottom: "4px" }}>
-                  {langFilter === "All"
-                    ? `Your top ${matches.length} compatible developers`
-                    : `${filteredMatches.length} of ${matches.length} match ${langFilter}`}
-                </p>
+                {langFilter !== "All" && (
+                  <p style={{ fontSize: "12px", color: "#475569", marginBottom: "4px" }}>
+                    {filteredMatches.length} of {matches.length} match {langFilter}
+                  </p>
+                )}
 
                 {filteredMatches.length === 0 ? (
                   <div style={{ textAlign: "center", padding: "40px 20px", color: "#475569", fontSize: "14px" }}>

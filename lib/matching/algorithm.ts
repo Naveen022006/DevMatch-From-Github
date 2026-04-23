@@ -116,16 +116,25 @@ export async function findMatches(myProfile: UserProfile): Promise<DeveloperMatc
   const top10 = filtered.slice(0, 10);
   const scored = await scoreCandidates(myProfile, top10);
 
-  const matchRows = scored.slice(0, 3).map((match) => ({
-    user_id_1: myProfile.id,
-    user_id_2: match.profile.id,
-    compatibility_total: match.compatibility.total,
-    technical_synergy: match.compatibility.technical_synergy,
-    learning_potential: match.compatibility.learning_potential,
-    collaboration_score: match.compatibility.collaboration_style,
-    personality_fit: match.compatibility.personality_fit,
-    match_reason: match.compatibility.reason,
-  }));
+  const matchRows = scored.slice(0, 3).map((match) => {
+    // Always store the pair with the lexicographically smaller UUID as user_id_1
+    // so (A,B) and (B,A) map to the same row and the upsert deduplicates correctly.
+    const [uid1, uid2] =
+      myProfile.id < match.profile.id
+        ? [myProfile.id, match.profile.id]
+        : [match.profile.id, myProfile.id];
+
+    return {
+      user_id_1: uid1,
+      user_id_2: uid2,
+      compatibility_total: match.compatibility.total,
+      technical_synergy: match.compatibility.technical_synergy,
+      learning_potential: match.compatibility.learning_potential,
+      collaboration_score: match.compatibility.collaboration_style,
+      personality_fit: match.compatibility.personality_fit,
+      match_reason: match.compatibility.reason,
+    };
+  });
 
   if (matchRows.length > 0) {
     await supabase

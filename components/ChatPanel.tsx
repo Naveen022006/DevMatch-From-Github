@@ -41,7 +41,11 @@ export function ChatPanel({ currentUserId, otherUser, onClose, onMessageRead }: 
     onMessageRead();
   }, [otherUser.id, onMessageRead]);
 
-  // Fetch conversation
+  // Keep a stable ref to markRead so the fetch effect never re-runs due to it
+  const markReadRef = useRef(markRead);
+  useEffect(() => { markReadRef.current = markRead; }, [markRead]);
+
+  // Fetch conversation — only re-runs when the conversation partner changes
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -54,10 +58,12 @@ export function ChatPanel({ currentUserId, otherUser, onClose, onMessageRead }: 
       setMessages(json.messages);
       setLoading(false);
       scrollToBottom();
-      await markRead();
+      await markReadRef.current();
     })();
     return () => { cancelled = true; };
-  }, [otherUser.id, markRead, scrollToBottom]);
+  // scrollToBottom is stable (empty deps), markReadRef.current is accessed via ref — safe to omit
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [otherUser.id]);
 
   // Realtime subscription
   useEffect(() => {
