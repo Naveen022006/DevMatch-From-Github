@@ -19,7 +19,7 @@ function parseGitHubUrl(url: string): { owner: string; repo: string } | null {
   return null;
 }
 
-export async function fetchRepoContent(
+async function fetchRepoContent(
   repoUrl: string,
   ghToken?: string
 ): Promise<string> {
