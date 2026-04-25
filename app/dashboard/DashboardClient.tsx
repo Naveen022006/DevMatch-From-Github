@@ -784,7 +784,7 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
             )}
 
             {feedItems.map(item => (
-              <FeedCard key={item.id} item={item} />
+              <FeedCard key={item.id} item={item} currentUserId={userId} />
             ))}
 
             {feedHasMore && (
@@ -1326,7 +1326,76 @@ function FeedSkeleton() {
   );
 }
 
-function FeedCard({ item }: { item: import("@/types").ActivityFeedItem }) {
+function FeedCard({ item, currentUserId }: { item: import("@/types").ActivityFeedItem; currentUserId: string }) {
+  const EMOJIS = ["👍", "❤️", "🔥", "🚀", "💡"];
+  type FeedComment = import("@/types").FeedComment;
+
+  const [reactions, setReactions] = useState<import("@/types").FeedReaction[]>(item.reactions ?? []);
+  const [showComments, setShowComments] = useState(false);
+  const [comments, setComments] = useState<FeedComment[]>([]);
+  const [commentsLoaded, setCommentsLoaded] = useState(false);
+  const [commentCount, setCommentCount] = useState(item.commentCount ?? 0);
+  const [commentText, setCommentText] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [reactingEmoji, setReactingEmoji] = useState<string | null>(null);
+
+  const toggleReaction = async (emoji: string) => {
+    if (reactingEmoji) return;
+    setReactingEmoji(emoji);
+    // Optimistic update
+    setReactions(prev => {
+      const existing = prev.find(r => r.emoji === emoji);
+      if (existing) {
+        if (existing.reacted) {
+          const newCount = existing.count - 1;
+          return newCount === 0
+            ? prev.filter(r => r.emoji !== emoji)
+            : prev.map(r => r.emoji === emoji ? { ...r, count: newCount, reacted: false } : r);
+        } else {
+          return prev.map(r => r.emoji === emoji ? { ...r, count: r.count + 1, reacted: true } : r);
+        }
+      }
+      return [...prev, { emoji, count: 1, reacted: true }];
+    });
+    await fetch(`/api/feed/${item.id}/react`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ emoji }),
+    });
+    setReactingEmoji(null);
+  };
+
+  const loadComments = async () => {
+    if (commentsLoaded) return;
+    const res = await fetch(`/api/feed/${item.id}/comments`);
+    const data = await res.json();
+    setComments(data.comments ?? []);
+    setCommentsLoaded(true);
+  };
+
+  const toggleComments = () => {
+    if (!showComments) loadComments();
+    setShowComments(v => !v);
+  };
+
+  const submitComment = async () => {
+    const text = commentText.trim();
+    if (!text || submitting) return;
+    setSubmitting(true);
+    const res = await fetch(`/api/feed/${item.id}/comments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: text }),
+    });
+    const data = await res.json();
+    if (data.comment) {
+      setComments(prev => [...prev, data.comment]);
+      setCommentCount(c => c + 1);
+      setCommentText("");
+    }
+    setSubmitting(false);
+  };
+
   const actionLabels: Record<string, string> = {
     joined: "joined DevMatch",
     connected: "connected with",
@@ -1342,61 +1411,6 @@ function FeedCard({ item }: { item: import("@/types").ActivityFeedItem }) {
     admin_post: "#a78bfa",
   };
 
-  // ── Admin broadcast post ───────────────────────────────────────────────────
-  if (item.action_type === "admin_post") {
-    const title = item.metadata?.title as string | undefined;
-    const content = item.metadata?.content as string | undefined;
-    const timeAgo = (() => {
-      const diff = Date.now() - new Date(item.created_at).getTime();
-      const m = Math.floor(diff / 60000);
-      if (m < 60) return `${m}m ago`;
-      const h = Math.floor(m / 60);
-      if (h < 24) return `${h}h ago`;
-      return `${Math.floor(h / 24)}d ago`;
-    })();
-
-    return (
-      <div
-        style={{
-          background: "rgba(13,13,26,0.95)",
-          border: "1px solid rgba(167,139,250,0.25)",
-          borderRadius: "14px",
-          padding: "16px 18px",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-          <span
-            style={{
-              fontSize: 10,
-              fontWeight: 700,
-              letterSpacing: "0.07em",
-              textTransform: "uppercase",
-              color: "#a78bfa",
-              background: "rgba(167,139,250,0.12)",
-              border: "1px solid rgba(167,139,250,0.25)",
-              padding: "2px 8px",
-              borderRadius: 20,
-            }}
-          >
-            DevMatch
-          </span>
-          <span style={{ fontSize: 11, color: "#475569" }}>{timeAgo}</span>
-        </div>
-        {title && (
-          <div style={{ fontSize: 14, fontWeight: 700, color: "#f1f5f9", marginBottom: 6 }}>
-            {title}
-          </div>
-        )}
-        {content && (
-          <div style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.65 }}>
-            {content}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  const color = actionColors[item.action_type] ?? "#94a3b8";
   const timeAgo = (() => {
     const diff = Date.now() - new Date(item.created_at).getTime();
     const m = Math.floor(diff / 60000);
@@ -1405,6 +1419,135 @@ function FeedCard({ item }: { item: import("@/types").ActivityFeedItem }) {
     if (h < 24) return `${h}h ago`;
     return `${Math.floor(h / 24)}d ago`;
   })();
+
+  // ── Shared reaction + comment bar ─────────────────────────────────────────
+  const InteractionBar = () => (
+    <div style={{ marginTop: 12 }}>
+      {/* Emoji reaction row */}
+      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
+        {EMOJIS.map(emoji => {
+          const r = reactions.find(x => x.emoji === emoji);
+          const active = r?.reacted ?? false;
+          return (
+            <button
+              key={emoji}
+              onClick={() => toggleReaction(emoji)}
+              disabled={reactingEmoji === emoji}
+              title={emoji}
+              style={{
+                padding: "3px 9px", borderRadius: "20px", fontSize: "13px",
+                cursor: "pointer", border: "none", transition: "all 0.12s",
+                display: "flex", alignItems: "center", gap: "4px",
+                background: active ? "rgba(167,139,250,0.18)" : "rgba(255,255,255,0.05)",
+                boxShadow: active ? "0 0 0 1px rgba(167,139,250,0.4)" : "none",
+              }}
+            >
+              <span>{emoji}</span>
+              {r && r.count > 0 && (
+                <span style={{ fontSize: "11px", color: active ? "#c4b5fd" : "#64748b", fontVariantNumeric: "tabular-nums" }}>
+                  {r.count}
+                </span>
+              )}
+            </button>
+          );
+        })}
+
+        {/* Comment toggle */}
+        <button
+          onClick={toggleComments}
+          style={{
+            marginLeft: "auto", padding: "3px 10px", borderRadius: "20px",
+            fontSize: "12px", cursor: "pointer", border: "none",
+            background: showComments ? "rgba(255,255,255,0.09)" : "rgba(255,255,255,0.04)",
+            color: showComments ? "#94a3b8" : "#475569", transition: "all 0.12s",
+            display: "flex", alignItems: "center", gap: "5px",
+          }}
+        >
+          <span>💬</span>
+          <span>{commentCount > 0 ? commentCount : ""} {commentCount === 1 ? "comment" : commentCount > 1 ? "comments" : "Comment"}</span>
+        </button>
+      </div>
+
+      {/* Comments section */}
+      {showComments && (
+        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: "8px" }}>
+          {!commentsLoaded && (
+            <div style={{ fontSize: 12, color: "#475569" }}>Loading…</div>
+          )}
+          {comments.map(c => (
+            <div key={c.id} style={{ display: "flex", gap: "8px", alignItems: "flex-start" }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={c.user.avatar_url} alt={c.user.github_username} style={{ width: 24, height: 24, borderRadius: "50%", flexShrink: 0, marginTop: 1 }} />
+              <div style={{ flex: 1, background: "rgba(255,255,255,0.04)", borderRadius: "10px", padding: "7px 11px" }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: c.isOwn ? "#c4b5fd" : "#94a3b8", marginRight: 6 }}>
+                  {c.user.display_name ?? c.user.github_username}
+                </span>
+                <span style={{ fontSize: 13, color: "#e2e8f0" }}>{c.content}</span>
+              </div>
+            </div>
+          ))}
+          {commentsLoaded && comments.length === 0 && (
+            <div style={{ fontSize: 12, color: "#475569", textAlign: "center", padding: "4px 0" }}>No comments yet. Be the first!</div>
+          )}
+          {/* Comment input */}
+          <div style={{ display: "flex", gap: "8px", marginTop: 4 }}>
+            <input
+              value={commentText}
+              onChange={e => setCommentText(e.target.value.slice(0, 200))}
+              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submitComment(); } }}
+              placeholder="Write a comment…"
+              style={{
+                flex: 1, padding: "8px 12px", borderRadius: "10px", fontSize: "13px",
+                background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
+                color: "#e2e8f0", outline: "none", fontFamily: "inherit",
+              }}
+            />
+            <button
+              onClick={submitComment}
+              disabled={!commentText.trim() || submitting}
+              style={{
+                padding: "8px 14px", borderRadius: "10px", fontSize: "13px", fontWeight: 600,
+                cursor: !commentText.trim() || submitting ? "not-allowed" : "pointer",
+                border: "none", transition: "all 0.12s",
+                background: commentText.trim() ? "rgba(124,58,237,0.3)" : "rgba(255,255,255,0.06)",
+                color: commentText.trim() ? "#c4b5fd" : "#475569",
+              }}
+            >
+              {submitting ? "…" : "Post"}
+            </button>
+          </div>
+          {commentText.length > 160 && (
+            <div style={{ fontSize: 11, color: commentText.length >= 200 ? "#ef4444" : "#64748b", textAlign: "right" }}>
+              {200 - commentText.length} left
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  // ── Admin broadcast post ───────────────────────────────────────────────────
+  if (item.action_type === "admin_post") {
+    const title = item.metadata?.title as string | undefined;
+    const content = item.metadata?.content as string | undefined;
+
+    return (
+      <div style={{ background: "rgba(13,13,26,0.95)", border: "1px solid rgba(167,139,250,0.25)", borderRadius: "14px", padding: "16px 18px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", color: "#a78bfa", background: "rgba(167,139,250,0.12)", border: "1px solid rgba(167,139,250,0.25)", padding: "2px 8px", borderRadius: 20 }}>
+            DevMatch
+          </span>
+          <span style={{ fontSize: 11, color: "#475569" }}>{timeAgo}</span>
+        </div>
+        {title && <div style={{ fontSize: 14, fontWeight: 700, color: "#f1f5f9", marginBottom: 6 }}>{title}</div>}
+        {content && <div style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.65 }}>{content}</div>}
+        <InteractionBar />
+      </div>
+    );
+  }
+
+  // ── Regular activity post ──────────────────────────────────────────────────
+  const color = actionColors[item.action_type] ?? "#94a3b8";
 
   return (
     <div style={{ background: "rgba(13,13,26,0.95)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "14px", padding: "14px 16px", display: "flex", gap: "12px", alignItems: "flex-start" }}>
@@ -1435,6 +1578,7 @@ function FeedCard({ item }: { item: import("@/types").ActivityFeedItem }) {
           )}
         </div>
         <div style={{ fontSize: "11px", color: "#475569", marginTop: "3px" }}>{timeAgo}</div>
+        <InteractionBar />
       </div>
     </div>
   );

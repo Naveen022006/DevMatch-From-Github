@@ -246,6 +246,20 @@ export interface FeedProfile {
   display_name: string | null;
 }
 
+export interface FeedReaction {
+  emoji: string;
+  count: number;
+  reacted: boolean;
+}
+
+export interface FeedComment {
+  id: string;
+  content: string;
+  created_at: string;
+  isOwn: boolean;
+  user: { github_username: string; avatar_url: string; display_name: string | null };
+}
+
 export interface ActivityFeedItem {
   id: string;
   actor_id: string;
@@ -255,4 +269,6 @@ export interface ActivityFeedItem {
   created_at: string;
   actor: FeedProfile;
   target: FeedProfile | null;
+  reactions?: FeedReaction[];
+  commentCount?: number;
 }

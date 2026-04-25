@@ -90,7 +90,7 @@ export function MatchCard({ match, requestStatus = "none", onSendRequest, onMess
             {score}
           </span>
           <span style={{ fontSize: "9px", color: "#64748b", marginTop: "3px", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-            match
+            score
           </span>
         </div>
       </div>

@@ -38,3 +38,7 @@ next-env.d.ts
 
 # supabase
 supabase/.temp/
+
+#.claude 
+devmatch-project-context.md
+testing-agent.md

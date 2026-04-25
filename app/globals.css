@@ -12,6 +12,20 @@ body {
   overflow-x: hidden;
 }
 
+/* Prevent Tailwind v4's border-color: currentColor from creating a visible
+   white/light border on the root elements */
+html, body {
+  border: none;
+  outline: none;
+  box-shadow: none;
+}
+
+/* Exclude html/body from the focus-visible ring so the
+   page edge never gets an outline when body is focused */
+html:focus-visible, body:focus-visible {
+  outline: none;
+}
+
 /* ── Keyframes ── */
 @keyframes float1 {
   0%, 100% { transform: translateY(0px); }
