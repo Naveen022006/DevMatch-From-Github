@@ -3,6 +3,7 @@ import type {
   UserProfile,
   AchievementSlug,
   UserAchievement,
+  AchievementDefinition,
 } from "@/types";
 import { createServiceClient } from "@/lib/supabase/server";
 import { ACHIEVEMENTS } from "@/lib/achievements/definitions";

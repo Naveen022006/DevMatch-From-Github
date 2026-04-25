@@ -24,7 +24,7 @@ export async function GET(_request: NextRequest) {
   if (challengesRes.error)
     return NextResponse.json({ error: challengesRes.error.message }, { status: 500 });
 
-  const subMap = new Map<string, (typeof submissionsRes.data)[number]>();
+  const subMap = new Map<string, NonNullable<typeof submissionsRes.data>[number]>();
   for (const s of submissionsRes.data ?? []) {
     subMap.set(s.challenge_id, s);
   }

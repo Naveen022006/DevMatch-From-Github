@@ -11,7 +11,16 @@ interface Props {
   loading: boolean;
 }
 
-const statDefs = [
+interface StatDef {
+  key: keyof AdminStats;
+  icon: string;
+  label: string;
+  color: string;
+  capitalize?: boolean;
+  achievement?: boolean;
+}
+
+const statDefs: StatDef[] = [
   { key: "totalUsers", icon: "◈", label: "Total Users", color: "#a78bfa" },
   { key: "totalMatches", icon: "⬡", label: "Total Matches", color: "#34d399" },
   { key: "totalAchievements", icon: "✦", label: "Achievements Earned", color: "#fbbf24" },
@@ -20,7 +29,7 @@ const statDefs = [
   { key: "avgCompatibilityScore", icon: "◎", label: "Avg Match Score", color: "#a78bfa" },
   { key: "mostPopularCodingIdentity", icon: "◆", label: "Top Identity", color: "#34d399", capitalize: true },
   { key: "mostPopularAchievement", icon: "🏅", label: "Top Achievement", color: "#fbbf24", achievement: true },
-] as const;
+];
 
 export default function OverviewTab({ stats, loading }: Props) {
   const maxLangCount = stats?.topLanguages?.[0]?.count ?? 1;

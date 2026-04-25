@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { isAdmin } from "@/lib/admin/auth";
-import { fetchRepoContent } from "@/app/api/challenges/[id]/submit/route";
+import { fetchRepoContent } from "@/lib/github/repo-content";
 import { nimChat } from "@/lib/nvidia/client";
 import type { ChallengeSubmission, AdminUserMini } from "@/types/admin";
 

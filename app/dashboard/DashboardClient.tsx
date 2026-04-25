@@ -1570,10 +1570,10 @@ function FeedCard({ item, currentUserId }: { item: import("@/types").ActivityFee
               </a>
             </>
           )}
-          {item.action_type === "achievement" && item.metadata?.name && (
+          {item.action_type === "achievement" && !!item.metadata?.name && (
             <span style={{ color: "#64748b" }}> — {item.metadata.icon as string} {item.metadata.name as string}</span>
           )}
-          {item.action_type === "challenge" && item.metadata?.title && (
+          {item.action_type === "challenge" && !!item.metadata?.title && (
             <span style={{ color: "#64748b" }}> — {item.metadata.title as string}</span>
           )}
         </div>
