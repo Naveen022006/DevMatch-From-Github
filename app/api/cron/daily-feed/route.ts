@@ -3,7 +3,8 @@ import { nimChat } from "@/lib/nvidia/client";
 import { createServiceClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+// Vercel Hobby plan max is 10s; upgrade to Pro to increase this to 60
+export const maxDuration = 10;
 
 // ─── Data fetchers ────────────────────────────────────────────────────────────
 
