@@ -19,13 +19,7 @@ export default function StoryCardsTab({ cards, loading }: Props) {
       </p>
 
       {loading && (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-            gap: 16,
-          }}
-        >
+        <div className="grid-cards">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="skeleton" style={{ height: 200, borderRadius: 12 }} />
           ))}
@@ -39,13 +33,7 @@ export default function StoryCardsTab({ cards, loading }: Props) {
               No story cards yet.
             </div>
           ) : (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-                gap: 16,
-              }}
-            >
+            <div className="grid-cards">
               {cards.map((card) => {
                 const borderColor = (card.primary_color ?? "#a78bfa") + "44";
                 return (

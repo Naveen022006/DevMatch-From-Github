@@ -114,3 +114,185 @@ html:focus-visible, body:focus-visible {
   outline: 2px solid rgba(167,139,250,0.5);
   outline-offset: 2px;
 }
+
+/* ═══════════════════════════════════════════════════════
+   RESPONSIVE UTILITIES
+   ═══════════════════════════════════════════════════════ */
+
+/* Prevent horizontal overflow at root */
+html, body { max-width: 100vw; overflow-x: hidden; }
+
+/* ── Scrollable tab/chip row (hides scrollbar visually) ── */
+.scroll-tabs {
+  display: flex;
+  flex-direction: row;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  flex-shrink: 0;
+}
+.scroll-tabs::-webkit-scrollbar { display: none; }
+
+/* ── 4-column grid that collapses to 2 on mobile ── */
+.grid-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+@media (max-width: 640px) {
+  .grid-stats {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+}
+
+/* ── Auto-fill grid: cards that shrink to 150px min on mobile ── */
+.grid-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+@media (max-width: 640px) {
+  .grid-cards {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+  }
+}
+
+/* ── 2-column grid that stacks on mobile ── */
+.grid-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 640px) {
+  .grid-2col {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+/* ── Responsive page container ── */
+.page-container {
+  width: min(680px, 100% - 24px);
+  margin: 0 auto;
+}
+
+/* ── Hide decorative elements on mobile ── */
+.hide-mobile { display: block; }
+@media (max-width: 640px) {
+  .hide-mobile { display: none !important; }
+}
+
+/* ── Responsive nav bar ── */
+.nav-bar {
+  padding: 14px 24px;
+}
+@media (max-width: 640px) {
+  .nav-bar {
+    padding: 12px 14px;
+  }
+}
+
+/* ── Responsive section padding ── */
+.section-pad {
+  padding: 28px 24px;
+}
+@media (max-width: 640px) {
+  .section-pad {
+    padding: 16px 12px;
+  }
+}
+
+/* ── Stack flex row on mobile ── */
+.stack-mobile {
+  display: flex;
+  flex-direction: row;
+}
+@media (max-width: 640px) {
+  .stack-mobile {
+    flex-direction: column;
+  }
+}
+
+/* ── Admin / data table: horizontal scroll wrapper ── */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 8px;
+}
+.table-scroll table {
+  min-width: 700px;
+}
+
+/* ── Admin matches table needs more space ── */
+.table-scroll-wide table {
+  min-width: 900px;
+}
+
+/* ── Landing hero section padding ── */
+.hero-pad {
+  padding: 60px 24px 80px;
+}
+@media (max-width: 640px) {
+  .hero-pad {
+    padding: 36px 16px 48px;
+  }
+}
+
+/* ── Landing feature cards grid ── */
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+}
+@media (max-width: 640px) {
+  .feature-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+}
+
+/* ── Landing nav ── */
+.landing-nav {
+  padding: 20px 32px;
+}
+@media (max-width: 640px) {
+  .landing-nav {
+    padding: 14px 16px;
+  }
+}
+
+/* ── Responsive admin container ── */
+.admin-container {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+@media (max-width: 768px) {
+  .admin-container {
+    padding: 16px 12px;
+  }
+}
+
+/* ── Profile page ── */
+.profile-container {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 40px 16px 60px;
+}
+@media (max-width: 640px) {
+  .profile-container {
+    padding: 24px 12px 40px;
+  }
+}
+
+/* ── Card padding that shrinks on mobile ── */
+.card-pad {
+  padding: 24px;
+}
+@media (max-width: 640px) {
+  .card-pad {
+    padding: 16px;
+  }
+}

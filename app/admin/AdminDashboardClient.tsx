@@ -249,6 +249,7 @@ export default function AdminDashboardClient({ githubUsername, avatarUrl }: Prop
     >
       {/* ── Nav ─────────────────────────────────────────────────────────── */}
       <nav
+        className="nav-bar"
         style={{
           position: "sticky",
           top: 0,
@@ -256,14 +257,13 @@ export default function AdminDashboardClient({ githubUsername, avatarUrl }: Prop
           borderBottom: "1px solid rgba(255,255,255,0.07)",
           background: "rgba(6,6,16,0.92)",
           backdropFilter: "blur(12px)",
-          padding: "0 24px",
           height: 56,
           display: "flex",
           alignItems: "center",
           gap: 16,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
           <span style={{ fontSize: 18, fontWeight: 800, color: "#f1f5f9" }}>DevMatch</span>
           <span
             style={{
@@ -276,6 +276,7 @@ export default function AdminDashboardClient({ githubUsername, avatarUrl }: Prop
               fontWeight: 700,
               letterSpacing: "0.06em",
               textTransform: "uppercase",
+              flexShrink: 0,
             }}
           >
             ADMIN
@@ -291,12 +292,13 @@ export default function AdminDashboardClient({ githubUsername, avatarUrl }: Prop
             padding: "6px 12px",
             borderRadius: 6,
             border: "1px solid rgba(255,255,255,0.07)",
+            flexShrink: 0,
           }}
         >
           ← Dashboard
         </Link>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div className="hide-mobile" style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {avatarUrl && (
             <Image
               src={avatarUrl}
@@ -319,6 +321,7 @@ export default function AdminDashboardClient({ githubUsername, avatarUrl }: Prop
             color: "#64748b",
             cursor: "pointer",
             fontSize: 13,
+            flexShrink: 0,
           }}
         >
           Sign out
@@ -326,7 +329,7 @@ export default function AdminDashboardClient({ githubUsername, avatarUrl }: Prop
       </nav>
 
       {/* ── Main ────────────────────────────────────────────────────────── */}
-      <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px" }}>
+      <div className="admin-container">
         {/* Error banner */}
         {error && (
           <div
@@ -355,14 +358,13 @@ export default function AdminDashboardClient({ githubUsername, avatarUrl }: Prop
 
         {/* Tab bar */}
         <div
+          className="scroll-tabs"
           style={{
-            display: "flex",
             gap: 4,
             marginBottom: 32,
             background: "rgba(255,255,255,0.04)",
             borderRadius: 10,
             padding: 4,
-            width: "fit-content",
           }}
         >
           {TABS.map((tab) => (
@@ -385,6 +387,8 @@ export default function AdminDashboardClient({ githubUsername, avatarUrl }: Prop
                   activeTab === tab.id
                     ? "1px solid rgba(167,139,250,0.25)"
                     : "none",
+                flexShrink: 0,
+                whiteSpace: "nowrap",
               }}
             >
               {tab.label}
@@ -397,11 +401,11 @@ export default function AdminDashboardClient({ githubUsername, avatarUrl }: Prop
 
         {/* Tab content */}
         <div
+          className="section-pad"
           style={{
             background: "rgba(13,13,26,0.6)",
             border: "1px solid rgba(255,255,255,0.07)",
             borderRadius: 14,
-            padding: "28px 28px",
           }}
         >
           {activeTab === "overview" && (

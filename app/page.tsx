@@ -20,7 +20,7 @@ export default async function HomePage() {
       }} />
 
       {/* ── Glow orb top ── */}
-      <div style={{
+      <div className="hide-mobile" style={{
         position: "fixed", top: "-200px", left: "50%", transform: "translateX(-30%)",
         width: "800px", height: "800px", borderRadius: "50%",
         background: "radial-gradient(circle, rgba(124,58,237,0.18) 0%, transparent 65%)",
@@ -29,7 +29,7 @@ export default async function HomePage() {
       }} />
 
       {/* ── Glow orb bottom ── */}
-      <div style={{
+      <div className="hide-mobile" style={{
         position: "fixed", bottom: "-200px", right: "-100px",
         width: "600px", height: "600px", borderRadius: "50%",
         background: "radial-gradient(circle, rgba(79,70,229,0.14) 0%, transparent 65%)",
@@ -38,10 +38,10 @@ export default async function HomePage() {
       }} />
 
       {/* ── Nav ── */}
-      <nav style={{
+      <nav className="landing-nav" style={{
         position: "relative", zIndex: 10,
         display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "20px 32px", maxWidth: "1100px", margin: "0 auto",
+        maxWidth: "1100px", margin: "0 auto",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <div style={{
@@ -60,10 +60,10 @@ export default async function HomePage() {
       </nav>
 
       {/* ── Hero ── */}
-      <section style={{
+      <section className="hero-pad" style={{
         position: "relative", zIndex: 10,
         display: "flex", flexDirection: "column", alignItems: "center",
-        textAlign: "center", padding: "60px 24px 80px",
+        textAlign: "center",
       }}>
         {/* Badge */}
         <div className="animate-fade-in" style={{
@@ -124,9 +124,8 @@ export default async function HomePage() {
         borderBottom: "1px solid rgba(255,255,255,0.07)",
         padding: "40px 24px",
       }}>
-        <div style={{
-          display: "grid", gridTemplateColumns: "repeat(4, 1fr)",
-          maxWidth: "700px", margin: "0 auto", gap: "0",
+        <div className="grid-stats" style={{
+          maxWidth: "700px", margin: "0 auto",
         }}>
           {[
             { value: "4", label: "Compatibility Dimensions" },
@@ -147,13 +146,13 @@ export default async function HomePage() {
       </section>
 
       {/* ── Features ── */}
-      <section style={{ position: "relative", zIndex: 10, padding: "80px 24px", maxWidth: "960px", margin: "0 auto" }}>
+      <section style={{ position: "relative", zIndex: 10, padding: "60px 20px", maxWidth: "960px", margin: "0 auto" }}>
         <p style={{
           textAlign: "center", fontSize: "11px", letterSpacing: "3px",
           textTransform: "uppercase", color: "#475569", marginBottom: "48px", fontWeight: 600,
         }}>Everything you need to connect</p>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(400px, 1fr))", gap: "16px" }}>
+        <div className="feature-grid">
           {[
             {
               icon: "⬡", iconColor: "#a78bfa", borderColor: "rgba(167,139,250,0.2)",
@@ -201,10 +200,10 @@ export default async function HomePage() {
       </section>
 
       {/* ── How it works ── */}
-      <section style={{ position: "relative", zIndex: 10, padding: "0 24px 80px", maxWidth: "760px", margin: "0 auto" }}>
+      <section style={{ position: "relative", zIndex: 10, padding: "0 16px 60px", maxWidth: "760px", margin: "0 auto" }}>
         <div style={{
           background: "rgba(124,58,237,0.08)", borderRadius: "20px",
-          border: "1px solid rgba(124,58,237,0.25)", padding: "48px 40px", textAlign: "center",
+          border: "1px solid rgba(124,58,237,0.25)", padding: "clamp(24px, 5vw, 48px) clamp(16px, 5vw, 40px)", textAlign: "center",
         }}>
           <p style={{ fontSize: "13px", color: "#7c3aed", fontWeight: 600, letterSpacing: "2px", textTransform: "uppercase", marginBottom: "16px" }}>How it works</p>
           <div style={{ display: "flex", justifyContent: "center", gap: "8px", flexWrap: "wrap" }}>

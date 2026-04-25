@@ -164,7 +164,7 @@ export function NotificationsPanel({ userId, onNavigate }: Props) {
       {open && (
         <div style={{
           position: "absolute", top: "calc(100% + 10px)", right: 0,
-          width: "340px", maxHeight: "480px",
+          width: "min(340px, calc(100vw - 24px))", maxHeight: "480px",
           background: "rgba(10,10,22,0.98)", border: "1px solid rgba(255,255,255,0.1)",
           borderRadius: "16px", boxShadow: "0 8px 40px rgba(0,0,0,0.5)",
           zIndex: 999, display: "flex", flexDirection: "column",

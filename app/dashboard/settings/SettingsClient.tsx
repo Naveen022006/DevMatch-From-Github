@@ -202,10 +202,9 @@ export default function SettingsClient({ profile, avatarUrl, githubUsername }: P
       <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0, backgroundImage: "linear-gradient(rgba(124,58,237,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(124,58,237,0.04) 1px, transparent 1px)", backgroundSize: "50px 50px" }} />
 
       {/* Nav */}
-      <nav style={{
+      <nav className="nav-bar" style={{
         position: "sticky", top: 0, zIndex: 40,
         display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "14px 24px",
         background: "rgba(6,6,16,0.88)", backdropFilter: "blur(20px)",
         borderBottom: "1px solid rgba(255,255,255,0.07)",
       }}>
@@ -226,7 +225,7 @@ export default function SettingsClient({ profile, avatarUrl, githubUsername }: P
         </div>
       </nav>
 
-      <main style={{ position: "relative", zIndex: 10, maxWidth: "640px", margin: "0 auto", padding: "36px 16px 64px" }}>
+      <main style={{ position: "relative", zIndex: 10, width: "min(640px, 100% - 24px)", margin: "0 auto", padding: "28px 0 64px" }}>
         <h1 style={{ fontSize: "22px", fontWeight: 800, color: "#f1f5f9", marginBottom: "28px" }}>
           Account Settings
         </h1>
@@ -272,7 +271,7 @@ export default function SettingsClient({ profile, avatarUrl, githubUsername }: P
           <div style={sectionTitle}>Personal Info</div>
           <div style={sectionDesc}>Basic details about you — all fields are optional</div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginBottom: "14px" }}>
+          <div className="grid-2col" style={{ marginBottom: "14px" }}>
             {/* Age */}
             <div>
               <label style={label}>Age</label>

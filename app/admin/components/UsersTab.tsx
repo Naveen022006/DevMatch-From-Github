@@ -45,7 +45,7 @@ export default function UsersTab({ users, loading, onDelete }: Props) {
       )}
 
       {!loading && users && (
-        <div className="overflow-x-auto">
+        <div className="table-scroll">
           <table
             style={{
               width: "100%",

@@ -126,9 +126,9 @@ export default async function PublicProfilePage({ params }: Props) {
     <div style={{ background: "#060610", minHeight: "100vh", color: "#e2e8f0", fontFamily: "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif" }}>
       {/* Background grid */}
       <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0, backgroundImage: "linear-gradient(rgba(124,58,237,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(124,58,237,0.04) 1px, transparent 1px)", backgroundSize: "50px 50px" }} />
-      <div style={{ position: "fixed", top: "-200px", left: "30%", width: "700px", height: "700px", borderRadius: "50%", background: `radial-gradient(circle, ${primaryColor}12 0%, transparent 65%)`, pointerEvents: "none", zIndex: 0 }} />
+      <div style={{ position: "fixed", top: "-200px", left: "30%", width: "700px", height: "700px", borderRadius: "50%", background: `radial-gradient(circle, ${primaryColor}12 0%, transparent 65%)`, pointerEvents: "none", zIndex: 0 }} className="hide-mobile" />
 
-      <main style={{ position: "relative", zIndex: 10, maxWidth: "640px", margin: "0 auto", padding: "40px 16px 60px" }}>
+      <main className="profile-container" style={{ position: "relative", zIndex: 10 }}>
 
         {/* Back link */}
         <a href="/" style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "#475569", textDecoration: "none", marginBottom: "28px" }}
@@ -137,7 +137,7 @@ export default async function PublicProfilePage({ params }: Props) {
         </a>
 
         {/* Hero card */}
-        <div style={{ background: "rgba(13,13,26,0.95)", border: `1px solid ${primaryColor}33`, borderRadius: "22px", padding: "28px", marginBottom: "18px", boxShadow: `0 0 40px ${primaryColor}0d` }}>
+        <div style={{ background: "rgba(13,13,26,0.95)", border: `1px solid ${primaryColor}33`, borderRadius: "22px", padding: "clamp(16px, 4vw, 28px)", marginBottom: "18px", boxShadow: `0 0 40px ${primaryColor}0d` }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: "18px", marginBottom: "20px" }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={typedProfile.avatar_url} alt={username} style={{ width: "72px", height: "72px", borderRadius: "16px", border: `2px solid ${primaryColor}55`, flexShrink: 0 }} />

@@ -40,12 +40,8 @@ export default function OverviewTab({ stats, loading }: Props) {
         Platform Overview
       </h2>
       <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
-          gap: 16,
-          marginBottom: 32,
-        }}
+        className="grid-cards"
+        style={{ marginBottom: 32 }}
       >
         {statDefs.map((def) => {
           if (loading || !stats) {

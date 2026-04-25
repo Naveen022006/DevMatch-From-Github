@@ -85,7 +85,7 @@ export default function MatchesTab({ matches, loading, onDelete }: Props) {
       )}
 
       {!loading && matches && (
-        <div className="overflow-x-auto">
+        <div className="table-scroll table-scroll-wide">
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr style={{ borderBottom: `1px solid ${BORDER}` }}>

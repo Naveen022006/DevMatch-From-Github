@@ -151,7 +151,7 @@ export function MatchCard({ match, requestStatus = "none", onSendRequest, onMess
             onClick={handleSendRequest}
             disabled={sending || effectiveStatus === "pending" || effectiveStatus === "accepted"}
             style={{
-              flex: 1, minWidth: "140px", padding: "11px 20px", borderRadius: "12px",
+              flex: 1, minWidth: "100px", padding: "11px 20px", borderRadius: "12px",
               fontSize: "14px", fontWeight: 700, cursor: sending || effectiveStatus === "pending" || effectiveStatus === "accepted" ? "default" : "pointer",
               transition: "all 0.15s",
               ...(effectiveStatus === "accepted"

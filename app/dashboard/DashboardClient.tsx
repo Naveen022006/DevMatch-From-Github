@@ -39,7 +39,7 @@ const S: Record<string, React.CSSProperties> = {
   page: { background: "#060610", minHeight: "100vh", color: "#e2e8f0", fontFamily: "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif" },
   nav: {
     position: "sticky", top: 0, zIndex: 40, display: "flex", alignItems: "center",
-    justifyContent: "space-between", padding: "14px 24px",
+    justifyContent: "space-between",
     background: "rgba(6,6,16,0.88)", backdropFilter: "blur(20px)",
     borderBottom: "1px solid rgba(255,255,255,0.07)",
   },
@@ -444,10 +444,10 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
     <div style={S.page}>
       {/* Background */}
       <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0, backgroundImage: "linear-gradient(rgba(124,58,237,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(124,58,237,0.04) 1px, transparent 1px)", backgroundSize: "50px 50px" }} />
-      <div style={{ position: "fixed", top: "-200px", left: "30%", width: "700px", height: "700px", borderRadius: "50%", background: "radial-gradient(circle, rgba(124,58,237,0.12) 0%, transparent 65%)", pointerEvents: "none", zIndex: 0, animation: "float1 12s ease-in-out infinite" }} />
+      <div className="hide-mobile" style={{ position: "fixed", top: "-200px", left: "30%", width: "700px", height: "700px", borderRadius: "50%", background: "radial-gradient(circle, rgba(124,58,237,0.12) 0%, transparent 65%)", pointerEvents: "none", zIndex: 0, animation: "float1 12s ease-in-out infinite" }} />
 
       {/* Nav */}
-      <nav style={S.nav}>
+      <nav className="nav-bar" style={S.nav}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <div style={S.logo}>D</div>
           <span style={{ fontWeight: 700, fontSize: "16px", color: "#fff" }}>DevMatch</span>
@@ -471,8 +471,8 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
           </a>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={avatarUrl} alt={githubUsername} style={{ width: "28px", height: "28px", borderRadius: "50%", border: "2px solid rgba(124,58,237,0.5)" }} />
-          <span style={{ fontSize: "13px", color: "#64748b", fontFamily: "monospace" }}>@{githubUsername}</span>
-          <button onClick={signOut} style={{ fontSize: "12px", color: "#475569", background: "none", border: "none", cursor: "pointer", padding: "4px 8px", borderRadius: "6px" }}
+          <span className="hide-mobile" style={{ fontSize: "13px", color: "#64748b", fontFamily: "monospace" }}>@{githubUsername}</span>
+          <button onClick={signOut} className="hide-mobile" style={{ fontSize: "12px", color: "#475569", background: "none", border: "none", cursor: "pointer", padding: "4px 8px", borderRadius: "6px" }}
             onMouseOver={e => (e.currentTarget.style.color = "#94a3b8")}
             onMouseOut={e => (e.currentTarget.style.color = "#475569")}>
             Sign out
@@ -480,11 +480,11 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
         </div>
       </nav>
 
-      <main style={{ position: "relative", zIndex: 10, maxWidth: "680px", margin: "0 auto", padding: "32px 16px" }}>
+      <main style={{ position: "relative", zIndex: 10, width: "min(680px, 100% - 24px)", margin: "0 auto", padding: "28px 0" }}>
 
         {/* Tab bar */}
-        <div style={{
-          display: "flex", gap: "4px", padding: "5px",
+        <div className="scroll-tabs" style={{
+          gap: "4px", padding: "5px",
           background: "rgba(13,13,26,0.9)", border: "1px solid rgba(255,255,255,0.07)",
           borderRadius: "14px", marginBottom: "28px",
         }}>
@@ -498,9 +498,9 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
               if (t.id === "achievements" && !loading) loadAchievements();
               if (t.id === "matches" && !loading) loadCachedMatches();
             }} style={{
-              flex: 1, padding: "9px 8px", borderRadius: "10px", fontSize: "13px",
+              flexShrink: 0, padding: "9px 12px", borderRadius: "10px", fontSize: "13px",
               fontWeight: 600, cursor: "pointer", transition: "all 0.15s", border: "none",
-              position: "relative",
+              position: "relative", whiteSpace: "nowrap",
               ...(tab === t.id
                 ? { background: "rgba(124,58,237,0.2)", color: "#c4b5fd", boxShadow: "0 0 0 1px rgba(124,58,237,0.3)" }
                 : { background: "transparent", color: "#475569" }),
@@ -1115,7 +1115,7 @@ function StatsGrid({ profile }: { profile: UserProfile }) {
     { v: profile.commit_style === "frequent" ? "Active" : "Periodic", l: "Commit style" },
   ];
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px" }}>
+    <div className="grid-stats">
       {stats.map(s => (
         <div key={s.l} style={{ background: "rgba(13,13,26,0.95)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "12px", padding: "14px 10px", textAlign: "center" }}>
           <div style={{ fontSize: "20px", fontWeight: 700, background: "linear-gradient(135deg, #a78bfa, #60a5fa)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>{s.v}</div>
