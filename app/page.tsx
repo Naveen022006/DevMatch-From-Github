@@ -48,11 +48,6 @@ export default async function HomePage() {
           <img src="/logo.png" alt="DevMatch" style={{ width: "36px", height: "36px", borderRadius: "8px", objectFit: "cover" }} />
           <span style={{ fontWeight: 700, fontSize: "17px", color: "#fff", letterSpacing: "-0.3px" }}>DevMatch</span>
         </div>
-        <div style={{
-          fontSize: "12px", padding: "6px 14px", borderRadius: "20px",
-          background: "rgba(124,58,237,0.15)", border: "1px solid rgba(124,58,237,0.35)",
-          color: "#c4b5fd",
-        }}>⚡ Powered by NVIDIA NIM</div>
       </nav>
 
       {/* ── Hero ── */}
