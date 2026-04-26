@@ -44,12 +44,8 @@ export default async function HomePage() {
         maxWidth: "1100px", margin: "0 auto",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <div style={{
-            width: "32px", height: "32px", borderRadius: "8px",
-            background: "linear-gradient(135deg, #7c3aed, #4f46e5)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            color: "#fff", fontWeight: 700, fontSize: "14px",
-          }}>D</div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="DevMatch" style={{ width: "36px", height: "36px", borderRadius: "8px", objectFit: "cover" }} />
           <span style={{ fontWeight: 700, fontSize: "17px", color: "#fff", letterSpacing: "-0.3px" }}>DevMatch</span>
         </div>
         <div style={{

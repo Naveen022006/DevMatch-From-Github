@@ -5,6 +5,10 @@ export const metadata: Metadata = {
   title: "DevMatch — Find Your Developer Tribe",
   description:
     "AI-powered developer friendship app. Match with compatible coders, share story cards, and grow together.",
+  icons: {
+    icon: "/logo.png",
+    apple: "/logo.png",
+  },
 };
 
 export default function RootLayout({

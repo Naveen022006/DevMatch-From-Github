@@ -264,6 +264,8 @@ export default function AdminDashboardClient({ githubUsername, avatarUrl }: Prop
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="DevMatch" style={{ width: 30, height: 30, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
           <span style={{ fontSize: 18, fontWeight: 800, color: "#f1f5f9" }}>DevMatch</span>
           <span
             style={{

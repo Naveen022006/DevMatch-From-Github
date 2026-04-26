@@ -44,10 +44,7 @@ const S: Record<string, React.CSSProperties> = {
     borderBottom: "1px solid rgba(255,255,255,0.07)",
   },
   logo: {
-    width: "30px", height: "30px", borderRadius: "8px", display: "flex",
-    alignItems: "center", justifyContent: "center",
-    background: "linear-gradient(135deg, #7c3aed, #4f46e5)",
-    color: "#fff", fontWeight: 700, fontSize: "13px", flexShrink: 0,
+    width: "30px", height: "30px", borderRadius: "8px", flexShrink: 0, objectFit: "cover" as const,
   },
 };
 
@@ -449,7 +446,8 @@ export default function DashboardClient({ userId, githubUsername, avatarUrl, ini
       {/* Nav */}
       <nav className="nav-bar" style={S.nav}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <div style={S.logo}>D</div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="DevMatch" style={S.logo} />
           <span style={{ fontWeight: 700, fontSize: "16px", color: "#fff" }}>DevMatch</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
